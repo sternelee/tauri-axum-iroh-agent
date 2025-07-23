@@ -58,9 +58,19 @@ impl IrohIntegratedClient {
     }
 
     /// 禁用聊天功能
-    pub fn disable_chat(&mut self) {
-        self.chat_client = None;
-        info!("聊天功能已禁用");
+    pub async fn disable_chat(&mut self) -> TransferResult<()> {
+        if let Some(chat_client) = self.chat_client.take() {
+            // 优雅地关闭聊天客户端
+            // 离开所有已加入的聊天室
+            let rooms = chat_client.get_joined_rooms();
+            for room in rooms {
+                let _ = chat_client.leave_room(LeaveRoomRequest {
+                    room_id: room.id,
+                }).await;
+            }
+            info!("聊天功能已禁用，已离开所有聊天室");
+        }
+        Ok(())
     }
 
     /// 检查聊天功能是否启用

@@ -98,7 +98,8 @@ impl IrohChatClient {
 
         // 订阅gossip主题
         let mut gossip_stream = self
-            .gossip
+            .iroh_client
+            .gossip()
             .subscribe(room.topic_id)
             .await
             .map_err(|e| IrohTransferError::network(format!("订阅gossip主题失败: {}", e)))?;
