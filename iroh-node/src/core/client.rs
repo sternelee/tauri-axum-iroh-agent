@@ -17,10 +17,10 @@ use iroh::{
         store::{ExportFormat, ExportMode},
     },
     client::{
-        docs::{ImportProgress, ShareMode},
         Doc, MemIroh as Iroh,
+        docs::{ImportProgress, ShareMode},
     },
-    docs::{store::Query, AuthorId, DocTicket},
+    docs::{AuthorId, DocTicket, store::Query},
     util::fs,
 };
 use std::{
@@ -114,19 +114,22 @@ impl IrohClient {
         // 确保下载目录存在
         std::fs::create_dir_all(&download_folder)?;
 
-        let mut entries = doc.get_many(Query::all()).await.map_err(IrohTransferError::from)?;
+        let mut entries = doc
+            .get_many(Query::all())
+            .await
+            .map_err(IrohTransferError::from)?;
 
         while let Some(entry) = entries.next().await {
             let entry = entry.map_err(IrohTransferError::from)?;
             let mut name = String::from_utf8_lossy(entry.key()).to_string();
-            
+
             // 处理文件名
             if name.len() >= 2 {
                 name.remove(name.len() - 1);
             }
 
             let dest = download_folder.join(&name);
-            
+
             info!(
                 "开始下载文件: {}, 大小: {}, 目标路径: {:?}",
                 name,
@@ -277,9 +280,7 @@ impl IrohClient {
             .doc()
             .import_file(self.author(), key, path, true)
             .await
-            .map_err(|e| {
-                IrohTransferError::other(format!("导入文件失败 \"{:?}\": {}", path, e))
-            })?;
+            .map_err(|e| IrohTransferError::other(format!("导入文件失败 \"{:?}\": {}", path, e)))?;
 
         let file_id = path.display().to_string();
 

@@ -1,7 +1,10 @@
 //! 集成的iroh P2P客户端，同时支持文件传输和聊天功能
 
 use super::{
-    chat::{ChatConfig, ChatEvent, ChatMessage, ChatRoom, CreateRoomRequest, JoinRoomRequest, LeaveRoomRequest, SendMessageRequest},
+    chat::{
+        ChatConfig, ChatEvent, ChatMessage, ChatRoom, CreateRoomRequest, JoinRoomRequest,
+        LeaveRoomRequest, SendMessageRequest,
+    },
     chat_client::IrohChatClient,
     client::IrohClient,
     error::{IrohTransferError, TransferResult},
@@ -26,11 +29,14 @@ pub struct IrohIntegratedClient {
 
 impl IrohIntegratedClient {
     /// 创建新的集成客户端
-    pub async fn new(transfer_config: TransferConfig, chat_config: ChatConfig) -> TransferResult<Self> {
+    pub async fn new(
+        transfer_config: TransferConfig,
+        chat_config: ChatConfig,
+    ) -> TransferResult<Self> {
         let transfer_client = Arc::new(IrohClient::new(transfer_config.clone()).await?);
-        
+
         info!("创建集成iroh客户端");
-        
+
         Ok(Self {
             transfer_client,
             chat_client: None,
@@ -48,11 +54,12 @@ impl IrohIntegratedClient {
 
         // 获取iroh客户端
         let iroh_client = self.transfer_client.client();
-        
+
         // 创建聊天客户端
-        let chat_client = Arc::new(IrohChatClient::new(iroh_client, self.chat_config.clone()).await?);
+        let chat_client =
+            Arc::new(IrohChatClient::new(iroh_client, self.chat_config.clone()).await?);
         self.chat_client = Some(chat_client);
-        
+
         info!("聊天功能已启用");
         Ok(())
     }
@@ -64,9 +71,9 @@ impl IrohIntegratedClient {
             // 离开所有已加入的聊天室
             let rooms = chat_client.get_joined_rooms();
             for room in rooms {
-                let _ = chat_client.leave_room(LeaveRoomRequest {
-                    room_id: room.id,
-                }).await;
+                let _ = chat_client
+                    .leave_room(LeaveRoomRequest { room_id: room.id })
+                    .await;
             }
             info!("聊天功能已禁用，已离开所有聊天室");
         }
@@ -135,7 +142,12 @@ impl IrohIntegratedClient {
     }
 
     /// 在聊天室中分享文件
-    pub async fn share_file_in_chat(&self, room_id: String, file_name: String, doc_ticket: String) -> TransferResult<()> {
+    pub async fn share_file_in_chat(
+        &self,
+        room_id: String,
+        file_name: String,
+        doc_ticket: String,
+    ) -> TransferResult<()> {
         let chat_client = self.get_chat_client()?;
         chat_client.share_file(room_id, file_name, doc_ticket).await
     }
@@ -169,20 +181,22 @@ impl IrohIntegratedClient {
     ) -> TransferResult<()> {
         // 先上传文件
         self.upload_file(upload_request.clone(), notifier).await?;
-        
+
         // 获取分享代码
         let share_response = self.get_share_code().await?;
-        
+
         // 获取文件名
-        let file_name = upload_request.file_path
+        let file_name = upload_request
+            .file_path
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("未知文件")
             .to_string();
-        
+
         // 在聊天室中分享
-        self.share_file_in_chat(room_id, file_name, share_response.doc_ticket).await?;
-        
+        self.share_file_in_chat(room_id, file_name, share_response.doc_ticket)
+            .await?;
+
         Ok(())
     }
 
@@ -198,7 +212,7 @@ impl IrohIntegratedClient {
                 doc_ticket: doc_ticket.clone(),
                 download_dir: None,
             };
-            
+
             self.download_files(download_request, notifier).await
         } else {
             Err(IrohTransferError::other("消息不是文件分享类型"))
@@ -209,9 +223,9 @@ impl IrohIntegratedClient {
 
     /// 获取聊天客户端引用
     fn get_chat_client(&self) -> TransferResult<&Arc<IrohChatClient>> {
-        self.chat_client.as_ref().ok_or_else(|| {
-            IrohTransferError::other("聊天功能未启用，请先调用 enable_chat()")
-        })
+        self.chat_client
+            .as_ref()
+            .ok_or_else(|| IrohTransferError::other("聊天功能未启用，请先调用 enable_chat()"))
     }
 
     /// 获取底层传输客户端
@@ -227,15 +241,15 @@ impl IrohIntegratedClient {
     /// 更新聊天用户昵称
     pub fn update_chat_user_name(&mut self, new_name: String) -> TransferResult<()> {
         self.chat_config.user_name = new_name.clone();
-        
+
         if let Some(chat_client) = &self.chat_client {
             // 注意：这里需要修改IrohChatClient以支持可变引用
             // 暂时返回错误，提示需要重新启用聊天功能
             return Err(IrohTransferError::other(
-                "要更改用户名，请先禁用聊天功能，更新配置后重新启用"
+                "要更改用户名，请先禁用聊天功能，更新配置后重新启用",
             ));
         }
-        
+
         Ok(())
     }
 }
@@ -278,11 +292,11 @@ impl IntegratedClientBuilder {
     /// 构建集成客户端
     pub async fn build(self) -> TransferResult<IrohIntegratedClient> {
         let mut client = IrohIntegratedClient::new(self.transfer_config, self.chat_config).await?;
-        
+
         if self.enable_chat {
             client.enable_chat().await?;
         }
-        
+
         Ok(client)
     }
 }

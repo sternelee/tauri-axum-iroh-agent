@@ -45,7 +45,8 @@ impl<T: TauriEventEmitter> ProgressNotifier for TauriProgressNotifier<T> {
                 self.emitter.emit_event("download-queue-progress", payload);
             }
             TransferEvent::DownloadDone { id } => {
-                self.emitter.emit_event("download-queue-done", serde_json::json!(id));
+                self.emitter
+                    .emit_event("download-queue-done", serde_json::json!(id));
             }
             TransferEvent::UploadQueueAppend { id, size, title } => {
                 let payload = serde_json::json!({
@@ -63,7 +64,8 @@ impl<T: TauriEventEmitter> ProgressNotifier for TauriProgressNotifier<T> {
                 self.emitter.emit_event("upload-queue-progress", payload);
             }
             TransferEvent::UploadDone { id } => {
-                self.emitter.emit_event("upload-queue-alldone", serde_json::json!(id));
+                self.emitter
+                    .emit_event("upload-queue-alldone", serde_json::json!(id));
             }
             TransferEvent::TransferError { id, error } => {
                 let payload = serde_json::json!({

@@ -122,7 +122,7 @@ impl AxumAdapter {
     pub async fn new(config: TransferConfig) -> TransferResult<Self> {
         let client = Arc::new(IrohClient::new(config).await?);
         let progress_notifiers = Arc::new(Mutex::new(HashMap::new()));
-        
+
         Ok(Self {
             client,
             progress_notifiers,
@@ -142,7 +142,7 @@ impl AxumAdapter {
     ) -> TransferResult<(String, broadcast::Receiver<WebProgressEvent>)> {
         let (notifier, receiver) = WebProgressNotifier::new();
         let notifier = Arc::new(notifier);
-        
+
         // 存储进度通知器
         {
             let mut notifiers = self.progress_notifiers.lock().unwrap();
@@ -168,7 +168,7 @@ impl AxumAdapter {
     ) -> TransferResult<broadcast::Receiver<WebProgressEvent>> {
         let (notifier, receiver) = WebProgressNotifier::new();
         let notifier = Arc::new(notifier);
-        
+
         // 存储进度通知器
         {
             let mut notifiers = self.progress_notifiers.lock().unwrap();

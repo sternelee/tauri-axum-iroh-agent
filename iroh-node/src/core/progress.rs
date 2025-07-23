@@ -7,20 +7,11 @@ use std::fmt;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TransferEvent {
     /// 下载队列添加文件
-    DownloadQueueAppend {
-        id: String,
-        size: u64,
-        name: String,
-    },
+    DownloadQueueAppend { id: String, size: u64, name: String },
     /// 下载进度更新
-    DownloadProgress {
-        id: String,
-        offset: u64,
-    },
+    DownloadProgress { id: String, offset: u64 },
     /// 下载完成
-    DownloadDone {
-        id: String,
-    },
+    DownloadDone { id: String },
     /// 上传队列添加文件
     UploadQueueAppend {
         id: String,
@@ -28,19 +19,11 @@ pub enum TransferEvent {
         title: String,
     },
     /// 上传进度更新
-    UploadProgress {
-        id: String,
-        offset: u64,
-    },
+    UploadProgress { id: String, offset: u64 },
     /// 上传完成
-    UploadDone {
-        id: String,
-    },
+    UploadDone { id: String },
     /// 传输错误
-    TransferError {
-        id: String,
-        error: String,
-    },
+    TransferError { id: String, error: String },
 }
 
 impl fmt::Display for TransferEvent {

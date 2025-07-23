@@ -5,7 +5,7 @@ mod tests {
     use super::super::{
         error::IrohTransferError,
         progress::{DefaultProgressNotifier, TransferEvent},
-        types::{TransferConfig, DownloadRequest, UploadRequest},
+        types::{DownloadRequest, TransferConfig, UploadRequest},
     };
     use std::path::PathBuf;
 
@@ -22,7 +22,7 @@ mod tests {
             doc_ticket: "test_ticket".to_string(),
             download_dir: Some(PathBuf::from("/tmp/downloads")),
         };
-        
+
         assert_eq!(request.doc_ticket, "test_ticket");
         assert!(request.download_dir.is_some());
     }
@@ -32,7 +32,7 @@ mod tests {
         let request = UploadRequest {
             file_path: PathBuf::from("/tmp/test.txt"),
         };
-        
+
         assert_eq!(request.file_path, PathBuf::from("/tmp/test.txt"));
     }
 
@@ -56,7 +56,7 @@ mod tests {
             size: 1024,
             name: "test.txt".to_string(),
         };
-        
+
         // 测试通知不会panic
         notifier.notify(event);
     }
@@ -67,7 +67,7 @@ mod tests {
             id: "test_id".to_string(),
             offset: 512,
         };
-        
+
         let display_str = format!("{}", event);
         assert!(display_str.contains("下载进度"));
         assert!(display_str.contains("test_id"));

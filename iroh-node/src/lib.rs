@@ -1,5 +1,5 @@
 //! iroh P2P文件传输通用模块
-//! 
+//!
 //! 提供跨平台的P2P文件传输功能，支持tauri、axum等不同运行环境
 
 #![cfg_attr(
@@ -7,30 +7,30 @@
     windows_subsystem = "windows"
 )]
 
-pub mod core;
 pub mod adapters;
+pub mod core;
 
 // 重新导出核心类型和功能
 pub use core::{
-    client::IrohClient,
+    chat::{
+        ChatConfig, ChatEvent, ChatMessage, ChatRoom, ChatUser, CreateRoomRequest, JoinRoomRequest,
+        LeaveRoomRequest, MessageType, SendMessageRequest,
+    },
     chat_client::IrohChatClient,
-    integrated_client::{IrohIntegratedClient, IntegratedClientBuilder},
+    client::IrohClient,
     error::{IrohTransferError, TransferResult},
+    integrated_client::{IntegratedClientBuilder, IrohIntegratedClient},
     progress::{DefaultProgressNotifier, ProgressCallback, ProgressNotifier, TransferEvent},
     types::{
         DownloadRequest, FileInfo, IrohState, RemoveRequest, ShareResponse, TransferConfig,
         UploadRequest,
-    },
-    chat::{
-        ChatConfig, ChatEvent, ChatMessage, ChatRoom, ChatUser, CreateRoomRequest,
-        JoinRoomRequest, LeaveRoomRequest, MessageType, SendMessageRequest,
     },
 };
 
 // 重新导出适配器
 pub use adapters::{
     axum_adapter::{AxumAdapter, WebApiResponse, WebProgressEvent},
-    standalone::{simple_api, StandaloneAdapter},
+    standalone::{StandaloneAdapter, simple_api},
     tauri_adapter::TauriAdapter,
 };
 
@@ -38,12 +38,12 @@ pub use adapters::{
 #[cfg(feature = "tauri-compat")]
 pub mod legacy {
     //! 向后兼容的tauri实现
-    
+
     use crate::core::{
         client::IrohClient,
         error::TransferResult,
         progress::{ProgressNotifier, TransferEvent},
-        types::{TransferConfig, DownloadRequest, UploadRequest, RemoveRequest},
+        types::{DownloadRequest, RemoveRequest, TransferConfig, UploadRequest},
     };
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
@@ -64,7 +64,7 @@ pub mod legacy {
                 download_dir: dirs_next::download_dir().map(|d| d.join("quick_send")),
                 verbose_logging: true,
             };
-            
+
             let client = Arc::new(IrohClient::new(config).await?);
             Ok(Self { client })
         }
@@ -119,23 +119,29 @@ pub mod legacy {
         handle: tauri::AppHandle<R>,
     ) -> Result<String, String> {
         let emitter = Arc::new(TauriEventEmitter::new(handle));
-        let adapter = crate::adapters::TauriAdapter::new(
-            TransferConfig::default(),
-            emitter,
-        ).await.map_err(|e| e.to_string())?;
+        let adapter = crate::adapters::TauriAdapter::new(TransferConfig::default(), emitter)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let request = DownloadRequest {
             doc_ticket: get_blob_request.blob_ticket,
             download_dir: None,
         };
 
-        adapter.download_files(request).await.map_err(|e| e.to_string())
+        adapter
+            .download_files(request)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn get_share_code(
         state: tauri::State<'_, AppState>,
     ) -> Result<GetShareCodeResponse, String> {
-        let response = state.client().get_share_code().await.map_err(|e| e.to_string())?;
+        let response = state
+            .client()
+            .get_share_code()
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(GetShareCodeResponse {
             doc_ticket: response.doc_ticket,
         })
@@ -147,16 +153,18 @@ pub mod legacy {
         handle: tauri::AppHandle<R>,
     ) -> Result<(), String> {
         let emitter = Arc::new(TauriEventEmitter::new(handle));
-        let adapter = crate::adapters::TauriAdapter::new(
-            TransferConfig::default(),
-            emitter,
-        ).await.map_err(|e| e.to_string())?;
+        let adapter = crate::adapters::TauriAdapter::new(TransferConfig::default(), emitter)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let request = UploadRequest {
             file_path: PathBuf::from(append_file_request.file_path),
         };
 
-        adapter.upload_file(request).await.map_err(|e| e.to_string())
+        adapter
+            .upload_file(request)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn remove_file(
@@ -167,7 +175,11 @@ pub mod legacy {
             file_path: PathBuf::from(remove_file_request.file_path),
         };
 
-        state.client().remove_file(request).await.map_err(|e| e.to_string())
+        state
+            .client()
+            .remove_file(request)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 

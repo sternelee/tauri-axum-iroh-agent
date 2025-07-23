@@ -143,7 +143,9 @@ pub mod simple_api {
         };
 
         let callback = Box::new(progress_callback);
-        adapter.download_files_with_callback(request, callback).await
+        adapter
+            .download_files_with_callback(request, callback)
+            .await
     }
 
     /// 带进度回调的上传

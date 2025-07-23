@@ -65,7 +65,7 @@ impl IrohChatClient {
     /// 创建聊天室
     pub async fn create_room(&self, request: CreateRoomRequest) -> TransferResult<ChatRoom> {
         let room = ChatRoom::new(request.name, request.description);
-        
+
         info!("创建聊天室: {} (ID: {})", room.name, room.id);
 
         // 加入自己创建的聊天室
@@ -118,7 +118,9 @@ impl IrohChatClient {
         self.send_message_internal(&join_message).await?;
 
         // 发送用户加入事件
-        let _ = self.event_sender.send(ChatEvent::UserJoined(self.current_user.clone()));
+        let _ = self
+            .event_sender
+            .send(ChatEvent::UserJoined(self.current_user.clone()));
 
         // 启动消息监听任务
         let room_id = room.id.clone();
@@ -130,15 +132,18 @@ impl IrohChatClient {
             while let Some(event) = gossip_stream.next().await {
                 match event {
                     Ok(gossip_event) => {
-                        if let Ok(message) = serde_json::from_slice::<ChatMessage>(&gossip_event.content) {
+                        if let Ok(message) =
+                            serde_json::from_slice::<ChatMessage>(&gossip_event.content)
+                        {
                             debug!("收到消息: {:?}", message);
 
                             // 存储消息历史
                             {
                                 let mut history = message_history.lock().unwrap();
-                                let room_messages = history.entry(room_id.clone()).or_insert_with(Vec::new);
+                                let room_messages =
+                                    history.entry(room_id.clone()).or_insert_with(Vec::new);
                                 room_messages.push(message.clone());
-                                
+
                                 // 限制历史消息数量
                                 if room_messages.len() > max_history {
                                     room_messages.remove(0);
@@ -233,7 +238,12 @@ impl IrohChatClient {
     }
 
     /// 分享文件到聊天室
-    pub async fn share_file(&self, room_id: String, file_name: String, doc_ticket: String) -> TransferResult<()> {
+    pub async fn share_file(
+        &self,
+        room_id: String,
+        file_name: String,
+        doc_ticket: String,
+    ) -> TransferResult<()> {
         if !self.config.enable_file_sharing {
             return Err(IrohTransferError::other("文件分享功能已禁用"));
         }

@@ -38,4 +38,4 @@ uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # 可选依赖
-tauri = { version = "1.0", features = ["api-all"], optional = true }
+tauri = { version = "2.7", optional = true }

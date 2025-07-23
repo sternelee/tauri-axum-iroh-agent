@@ -1,8 +1,8 @@
 //! 核心类型定义
 
 use iroh::{
-    docs::{AuthorId, DocTicket},
     client::Doc,
+    docs::{AuthorId, DocTicket},
 };
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

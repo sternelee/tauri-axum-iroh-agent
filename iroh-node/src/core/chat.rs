@@ -37,7 +37,10 @@ pub enum MessageType {
     /// 用户离开
     UserLeft,
     /// 文件分享
-    FileShare { file_name: String, doc_ticket: String },
+    FileShare {
+        file_name: String,
+        doc_ticket: String,
+    },
 }
 
 /// 聊天室信息
@@ -145,7 +148,12 @@ impl Default for ChatConfig {
 
 impl ChatMessage {
     /// 创建新的文本消息
-    pub fn new_text(sender_id: String, sender_name: String, content: String, room_id: String) -> Self {
+    pub fn new_text(
+        sender_id: String,
+        sender_name: String,
+        content: String,
+        room_id: String,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             sender_id,
@@ -183,7 +191,10 @@ impl ChatMessage {
             sender_id,
             sender_name,
             content: format!("分享了文件: {}", file_name),
-            message_type: MessageType::FileShare { file_name, doc_ticket },
+            message_type: MessageType::FileShare {
+                file_name,
+                doc_ticket,
+            },
             timestamp: Utc::now(),
             room_id,
         }
@@ -195,7 +206,7 @@ impl ChatRoom {
     pub fn new(name: String, description: Option<String>) -> Self {
         let id = Uuid::new_v4().to_string();
         let topic_id = TopicId::from(id.as_bytes());
-        
+
         Self {
             id,
             name,
