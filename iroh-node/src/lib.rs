@@ -13,11 +13,17 @@ pub mod adapters;
 // 重新导出核心类型和功能
 pub use core::{
     client::IrohClient,
+    chat_client::IrohChatClient,
+    integrated_client::{IrohIntegratedClient, IntegratedClientBuilder},
     error::{IrohTransferError, TransferResult},
     progress::{DefaultProgressNotifier, ProgressCallback, ProgressNotifier, TransferEvent},
     types::{
         DownloadRequest, FileInfo, IrohState, RemoveRequest, ShareResponse, TransferConfig,
         UploadRequest,
+    },
+    chat::{
+        ChatConfig, ChatEvent, ChatMessage, ChatRoom, ChatUser, CreateRoomRequest,
+        JoinRoomRequest, LeaveRoomRequest, MessageType, SendMessageRequest,
     },
 };
 

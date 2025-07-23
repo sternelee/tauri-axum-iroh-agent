@@ -1,6 +1,6 @@
 # Tauri-Axum-Iroh Agent
 
-这是一个展示如何将iroh P2P文件传输功能集成到不同运行环境的项目。项目包含了一个通用的iroh传输模块以及在tauri桌面应用和axum web服务中的集成示例。
+这是一个展示如何将iroh P2P文件传输和实时聊天功能集成到不同运行环境的项目。项目包含了一个通用的iroh模块，同时支持文件传输和实时聊天，以及在tauri桌面应用和axum web服务中的集成示例。
 
 ## 项目结构
 
@@ -15,7 +15,7 @@
 
 ### 🎯 重构目标达成
 
-本项目成功将原本强依赖tauri框架的iroh文件传输功能重构为通用的模块化实现：
+本项目成功将原本强依赖tauri框架的iroh文件传输功能重构为通用的模块化实现，并新增了实时聊天功能：
 
 1. ✅ **核心逻辑解耦** - 将P2P传输逻辑从tauri框架中完全分离
 2. ✅ **标准化接口** - 设计了统一的API接口，支持多种运行环境
@@ -23,6 +23,8 @@
 4. ✅ **错误处理** - 实现了完整的错误处理机制和类型安全
 5. ✅ **进度回调** - 保留了完整的传输进度通知功能
 6. ✅ **模块化设计** - 提供了清晰的模块导出和类型定义
+7. ✅ **实时聊天** - 基于iroh gossip协议的P2P实时聊天功能
+8. ✅ **文件分享** - 在聊天中直接分享和下载文件
 
 ### 🏗️ 架构设计
 
@@ -32,7 +34,10 @@
 iroh-node/
 ├── src/
 │   ├── core/                    # 核心功能模块
-│   │   ├── client.rs           # iroh客户端实现
+│   │   ├── client.rs           # iroh文件传输客户端
+│   │   ├── chat.rs             # 聊天类型定义
+│   │   ├── chat_client.rs      # iroh聊天客户端
+│   │   ├── integrated_client.rs # 集成客户端（文件+聊天）
 │   │   ├── types.rs            # 类型定义
 │   │   ├── progress.rs         # 进度回调系统
 │   │   ├── error.rs            # 错误处理
@@ -43,7 +48,8 @@ iroh-node/
 │   │   └── axum_adapter.rs     # Axum适配器
 │   └── lib.rs                  # 模块导出
 ├── examples/
-│   └── standalone_usage.rs     # 使用示例
+│   ├── standalone_usage.rs     # 文件传输示例
+│   └── chat_usage.rs           # 聊天功能示例
 └── README.md                   # 模块文档
 ```
 
@@ -54,6 +60,8 @@ iroh-node/
 - **异步支持** - 基于tokio的异步实现
 - **进度通知** - 支持实时传输进度回调
 - **错误处理** - 标准化的错误类型和处理机制
+- **实时聊天** - 基于iroh gossip协议的P2P聊天功能
+- **文件分享** - 聊天中直接分享和下载文件
 
 ## 快速开始
 
@@ -79,7 +87,16 @@ cd axum-app
 cargo run
 ```
 
-然后访问 `http://localhost:3000/static/iroh-test.html` 测试Web API。
+然后访问以下页面测试功能：
+- `http://localhost:3000/static/iroh-test.html` - 文件传输功能测试
+- `http://localhost:3000/static/chat-test.html` - 实时聊天功能测试
+
+### 4. 运行聊天功能示例
+
+```bash
+cd iroh-node
+cargo run --example chat_usage
+```
 
 ## 使用示例
 
@@ -152,16 +169,69 @@ let adapter = AxumAdapter::new(config).await?;
 let result = adapter.download_files(request).await?;
 ```
 
+### 聊天功能使用
+
+```rust
+use iroh_node::{IntegratedClientBuilder, ChatConfig, TransferConfig, CreateRoomRequest, SendMessageRequest, MessageType};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 创建集成客户端（支持文件传输和聊天）
+    let client = IntegratedClientBuilder::new()
+        .transfer_config(TransferConfig::default())
+        .chat_config(ChatConfig {
+            user_name: "小明".to_string(),
+            max_message_history: 100,
+            enable_file_sharing: true,
+        })
+        .enable_chat(true)
+        .build()
+        .await?;
+
+    // 创建聊天室
+    let room = client.create_chat_room(CreateRoomRequest {
+        name: "测试聊天室".to_string(),
+        description: Some("这是一个测试聊天室".to_string()),
+    }).await?;
+
+    // 发送消息
+    client.send_chat_message(SendMessageRequest {
+        room_id: room.id.clone(),
+        content: "大家好！".to_string(),
+        message_type: MessageType::Text,
+    }).await?;
+
+    // 监听聊天事件
+    let mut events = client.subscribe_chat_events()?;
+    while let Ok(event) = events.recv().await {
+        println!("收到聊天事件: {:?}", event);
+    }
+
+    Ok(())
+}
+```
+
 ## API文档
 
 ### Web API端点 (Axum)
 
+#### 文件传输API
 - `GET /api/iroh/share` - 获取分享代码
 - `POST /api/iroh/upload` - 上传文件
 - `POST /api/iroh/download` - 下载文件
 - `POST /api/iroh/remove` - 删除文件
 - `POST /api/iroh/session` - 创建进度会话
 - `GET /api/iroh/progress/:session_id` - 进度事件流 (SSE)
+
+#### 聊天API
+- `POST /api/chat/rooms` - 创建聊天室
+- `GET /api/chat/rooms` - 获取聊天室列表
+- `POST /api/chat/rooms/join` - 加入聊天室
+- `POST /api/chat/rooms/leave` - 离开聊天室
+- `POST /api/chat/messages` - 发送消息
+- `GET /api/chat/messages/:room_id` - 获取消息历史
+- `POST /api/chat/session` - 创建聊天事件会话
+- `GET /api/chat/events/:session_id` - 聊天事件流 (SSE)
 
 ### Tauri命令
 
@@ -173,12 +243,15 @@ let result = adapter.download_files(request).await?;
 ## 技术栈
 
 - **Rust** - 核心语言
-- **iroh** - P2P传输库
+- **iroh** - P2P传输和gossip协议库
+- **iroh-gossip** - P2P实时通信协议
 - **tokio** - 异步运行时
 - **axum** - Web框架
 - **tauri** - 桌面应用框架
 - **serde** - 序列化/反序列化
 - **tracing** - 日志系统
+- **uuid** - 唯一标识符生成
+- **chrono** - 时间处理
 
 ## 测试
 

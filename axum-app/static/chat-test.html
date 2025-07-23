@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iroh P2P聊天测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+            margin-top: 0;
+        }
+        .chat-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            height: 600px;
+        }
+        .sidebar {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-y: auto;
+        }
+        .chat-area {
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        .chat-header {
+            padding: 15px;
+            background: #007bff;
+            color: white;
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+        }
+        .messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            border-bottom: 1px solid #eee;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            max-width: 70%;
+        }
+        .message.own {
+            background: #007bff;
+            color: white;
+            margin-left: auto;
+        }
+        .message.other {
+            background: #e9ecef;
+            color: #333;
+        }
+        .message.system {
+            background: #fff3cd;
+            color: #856404;
+            text-align: center;
+            max-width: 100%;
+            font-style: italic;
+        }
+        .message-info {
+            font-size: 0.8em;
+            opacity: 0.8;
+            margin-bottom: 4px;
+        }
+        .message-content {
+            word-wrap: break-word;
+        }
+        .input-area {
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .room-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+        }
+        .room-item:hover {
+            background: #e9ecef;
+        }
+        .room-item.active {
+            background: #007bff;
+            color: white;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .hidden {
+            display: none;
+        }
+        .file-share {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        .file-share button {
+            background: #28a745;
+            font-size: 12px;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>iroh P2P实时聊天测试</h1>
+    
+    <div class="container">
+        <div class="form-group">
+            <label>用户昵称:</label>
+            <input type="text" id="userName" value="测试用户" />
+            <button onclick="updateUserName()">更新昵称</button>
+        </div>
+        
+        <div class="form-group">
+            <label>创建聊天室:</label>
+            <input type="text" id="roomName" placeholder="聊天室名称" />
+            <input type="text" id="roomDescription" placeholder="聊天室描述（可选）" />
+            <button onclick="createRoom()">创建聊天室</button>
+        </div>
+        
+        <div class="form-group">
+            <label>加入聊天室:</label>
+            <input type="text" id="joinRoomId" placeholder="聊天室ID" />
+            <button onclick="joinRoom()">加入聊天室</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+
+    <div class="container">
+        <div class="chat-layout">
+            <div class="sidebar">
+                <h3>聊天室列表</h3>
+                <div id="roomList"></div>
+                <button onclick="refreshRooms()">刷新列表</button>
+            </div>
+            
+            <div class="chat-area">
+                <div class="chat-header">
+                    <span id="currentRoomName">请选择或创建聊天室</span>
+                </div>
+                <div class="messages" id="messages"></div>
+                <div class="input-area">
+                    <input type="text" id="messageInput" placeholder="输入消息..." onkeypress="handleKeyPress(event)" disabled />
+                    <button onclick="sendMessage()" id="sendButton" disabled>发送</button>
+                    <button onclick="leaveRoom()" id="leaveButton" disabled>离开</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentRoomId = null;
+        let currentUserName = '测试用户';
+        let eventSource = null;
+        let sessionId = null;
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            setTimeout(() => {
+                statusDiv.textContent = '';
+                statusDiv.className = 'status';
+            }, 5000);
+        }
+
+        function addMessage(message, type = 'other') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            if (type === 'system') {
+                messageDiv.innerHTML = `<div class="message-content">${message}</div>`;
+            } else {
+                const time = new Date().toLocaleTimeString();
+                messageDiv.innerHTML = `
+                    <div class="message-info">${time}</div>
+                    <div class="message-content">${message}</div>
+                `;
+            }
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateUserName() {
+            const newName = document.getElementById('userName').value.trim();
+            if (newName) {
+                currentUserName = newName;
+                showStatus(`用户昵称已更新为: ${newName}`, 'success');
+            }
+        }
+
+        async function createRoom() {
+            const name = document.getElementById('roomName').value.trim();
+            const description = document.getElementById('roomDescription').value.trim();
+            
+            if (!name) {
+                showStatus('请输入聊天室名称', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/chat/rooms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name, 
+                        description: description || null 
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus(`聊天室创建成功: ${result.data.name}`, 'success');
+                    document.getElementById('roomName').value = '';
+                    document.getElementById('roomDescription').value = '';
+                    refreshRooms();
+                } else {
+                    showStatus(`创建失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`请求失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function joinRoom() {
+            const roomId = document.getElementById('joinRoomId').value.trim();
+            
+            if (!roomId) {
+                showStatus('请输入聊天室ID', 'error');
+                return;
+            }
+
+            await joinRoomById(roomId);
+        }
+
+        async function joinRoomById(roomId) {
+            try {
+                const response = await fetch('/api/chat/rooms/join', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        room_id: roomId,
+                        user_name: currentUserName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentRoomId = roomId;
+                    document.getElementById('currentRoomName').textContent = `聊天室: ${roomId.substring(0, 8)}...`;
+                    document.getElementById('messageInput').disabled = false;
+                    document.getElementById('sendButton').disabled = false;
+                    document.getElementById('leaveButton').disabled = false;
+                    document.getElementById('joinRoomId').value = '';
+                    
+                    // 清空消息区域
+                    document.getElementById('messages').innerHTML = '';
+                    
+                    // 开始监听聊天事件
+                    await startChatEventStream();
+                    
+                    // 加载消息历史
+                    await loadMessageHistory(roomId);
+                    
+                    showStatus(`成功加入聊天室`, 'success');
+                } else {
+                    showStatus(`加入失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`请求失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function sendMessage() {
+            const content = document.getElementById('messageInput').value.trim();
+            
+            if (!content || !currentRoomId) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/chat/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        room_id: currentRoomId,
+                        content: content
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('messageInput').value = '';
+                    // 消息会通过事件流接收到
+                } else {
+                    showStatus(`发送失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`发送失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function leaveRoom() {
+            if (!currentRoomId) return;
+
+            try {
+                const response = await fetch('/api/chat/rooms/leave', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ room_id: currentRoomId })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 停止事件流
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                    
+                    currentRoomId = null;
+                    document.getElementById('currentRoomName').textContent = '请选择或创建聊天室';
+                    document.getElementById('messageInput').disabled = true;
+                    document.getElementById('sendButton').disabled = true;
+                    document.getElementById('leaveButton').disabled = true;
+                    document.getElementById('messages').innerHTML = '';
+                    
+                    showStatus('已离开聊天室', 'success');
+                } else {
+                    showStatus(`离开失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`请求失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function refreshRooms() {
+            try {
+                const response = await fetch('/api/chat/rooms');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const roomList = document.getElementById('roomList');
+                    roomList.innerHTML = '';
+                    
+                    result.data.forEach(room => {
+                        const roomDiv = document.createElement('div');
+                        roomDiv.className = 'room-item';
+                        roomDiv.innerHTML = `
+                            <div><strong>${room.name}</strong></div>
+                            <div style="font-size: 0.8em; color: #666;">ID: ${room.id.substring(0, 16)}...</div>
+                            <div style="font-size: 0.8em; color: #666;">在线: ${room.online_users}人</div>
+                        `;
+                        roomDiv.onclick = () => joinRoomById(room.id);
+                        roomList.appendChild(roomDiv);
+                    });
+                } else {
+                    showStatus(`获取聊天室列表失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`请求失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadMessageHistory(roomId) {
+            try {
+                const response = await fetch(`/api/chat/messages/${roomId}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    result.data.forEach(message => {
+                        const isOwn = message.sender_name === currentUserName;
+                        const messageType = message.message_type;
+                        
+                        if (messageType === 'System') {
+                            addMessage(message.content, 'system');
+                        } else if (messageType.FileShare) {
+                            const fileInfo = messageType.FileShare;
+                            addMessage(`
+                                <div class="file-share">
+                                    📁 ${message.sender_name} 分享了文件: ${fileInfo.file_name}
+                                    <br><button onclick="downloadSharedFile('${fileInfo.doc_ticket}', '${fileInfo.file_name}')">下载文件</button>
+                                </div>
+                            `, isOwn ? 'own' : 'other');
+                        } else {
+                            addMessage(`<strong>${message.sender_name}:</strong> ${message.content}`, isOwn ? 'own' : 'other');
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('加载消息历史失败:', error);
+            }
+        }
+
+        async function startChatEventStream() {
+            // 先创建会话
+            try {
+                const response = await fetch('/api/chat/session', { method: 'POST' });
+                const result = await response.json();
+                
+                if (!result.success) {
+                    showStatus(`创建聊天会话失败: ${result.error}`, 'error');
+                    return;
+                }
+                
+                sessionId = result.data;
+                
+                // 开始事件流
+                eventSource = new EventSource(`/api/chat/events/${sessionId}`);
+                
+                eventSource.addEventListener('message_received', function(event) {
+                    const message = JSON.parse(event.data);
+                    const isOwn = message.sender_name === currentUserName;
+                    
+                    if (message.message_type === 'System') {
+                        addMessage(message.content, 'system');
+                    } else if (message.message_type.FileShare) {
+                        const fileInfo = message.message_type.FileShare;
+                        addMessage(`
+                            <div class="file-share">
+                                📁 ${message.sender_name} 分享了文件: ${fileInfo.file_name}
+                                <br><button onclick="downloadSharedFile('${fileInfo.doc_ticket}', '${fileInfo.file_name}')">下载文件</button>
+                            </div>
+                        `, isOwn ? 'own' : 'other');
+                    } else {
+                        addMessage(`<strong>${message.sender_name}:</strong> ${message.content}`, isOwn ? 'own' : 'other');
+                    }
+                });
+                
+                eventSource.addEventListener('user_joined', function(event) {
+                    const user = JSON.parse(event.data);
+                    addMessage(`${user.name} 加入了聊天室`, 'system');
+                });
+                
+                eventSource.addEventListener('user_left', function(event) {
+                    const data = JSON.parse(event.data);
+                    addMessage(`${data.user_name} 离开了聊天室`, 'system');
+                });
+                
+                eventSource.addEventListener('error', function(event) {
+                    console.error('聊天事件流错误:', event);
+                    showStatus('聊天连接出现问题', 'error');
+                });
+                
+                eventSource.onerror = function(event) {
+                    console.error('EventSource错误:', event);
+                    showStatus('聊天连接断开', 'error');
+                };
+                
+            } catch (error) {
+                showStatus(`启动聊天事件流失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function downloadSharedFile(docTicket, fileName) {
+            try {
+                const response = await fetch('/api/iroh/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ doc_ticket: docTicket })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus(`文件 ${fileName} 下载成功: ${result.data}`, 'success');
+                } else {
+                    showStatus(`下载失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`下载失败: ${error.message}`, 'error');
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // 页面加载时初始化
+        window.onload = function() {
+            refreshRooms();
+        };
+
+        // 页面卸载时清理资源
+        window.onbeforeunload = function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+            if (sessionId) {
+                fetch(`/api/chat/session/${sessionId}/cleanup`, { method: 'POST' });
+            }
+        };
+    </script>
+</body>
+</html>
