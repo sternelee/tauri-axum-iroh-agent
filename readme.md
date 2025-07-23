@@ -1,18 +1,236 @@
-Tauri Axum Htmx Example
+# Tauri-Axum-Iroh Agent
 
-## Pre-requisites
+这是一个展示如何将iroh P2P文件传输功能集成到不同运行环境的项目。项目包含了一个通用的iroh传输模块以及在tauri桌面应用和axum web服务中的集成示例。
 
-* [tauri-cli](https://crates.io/crates/tauri-cli)
-* [Tauri Android prerequisites](https://v2.tauri.app/start/prerequisites/#android)
-* [Tauri iOS prerequisites](https://v2.tauri.app/start/prerequisites/#ios)
+## 项目结构
 
-## Running the example
+```
+├── iroh-node/          # 通用iroh P2P文件传输模块
+├── tauri-app/          # Tauri桌面应用示例
+├── axum-app/           # Axum Web服务示例
+└── README.md           # 项目说明文档
+```
 
-Desktop
-```cargo tauri dev```
+## 重构成果
 
-Android
-```cargo tauri android dev```
+### 🎯 重构目标达成
 
-iOS
-```cargo tauri ios dev```
+本项目成功将原本强依赖tauri框架的iroh文件传输功能重构为通用的模块化实现：
+
+1. ✅ **核心逻辑解耦** - 将P2P传输逻辑从tauri框架中完全分离
+2. ✅ **标准化接口** - 设计了统一的API接口，支持多种运行环境
+3. ✅ **适配器模式** - 创建了tauri、axum、独立运行等多种适配器
+4. ✅ **错误处理** - 实现了完整的错误处理机制和类型安全
+5. ✅ **进度回调** - 保留了完整的传输进度通知功能
+6. ✅ **模块化设计** - 提供了清晰的模块导出和类型定义
+
+### 🏗️ 架构设计
+
+#### 核心模块 (`iroh-node`)
+
+```
+iroh-node/
+├── src/
+│   ├── core/                    # 核心功能模块
+│   │   ├── client.rs           # iroh客户端实现
+│   │   ├── types.rs            # 类型定义
+│   │   ├── progress.rs         # 进度回调系统
+│   │   ├── error.rs            # 错误处理
+│   │   └── tests.rs            # 单元测试
+│   ├── adapters/               # 适配器层
+│   │   ├── standalone.rs       # 独立运行适配器
+│   │   ├── tauri_adapter.rs    # Tauri适配器
+│   │   └── axum_adapter.rs     # Axum适配器
+│   └── lib.rs                  # 模块导出
+├── examples/
+│   └── standalone_usage.rs     # 使用示例
+└── README.md                   # 模块文档
+```
+
+#### 关键特性
+
+- **通用性** - 不依赖特定UI框架，可在多种环境使用
+- **类型安全** - 完整的Rust类型系统支持
+- **异步支持** - 基于tokio的异步实现
+- **进度通知** - 支持实时传输进度回调
+- **错误处理** - 标准化的错误类型和处理机制
+
+## 快速开始
+
+### 1. 独立使用iroh模块
+
+```bash
+cd iroh-node
+cargo run --example standalone_usage
+```
+
+### 2. 运行Tauri桌面应用
+
+```bash
+cd tauri-app
+npm install
+npm run tauri dev
+```
+
+### 3. 运行Axum Web服务
+
+```bash
+cd axum-app
+cargo run
+```
+
+然后访问 `http://localhost:3000/static/iroh-test.html` 测试Web API。
+
+## 使用示例
+
+### 简单API使用
+
+```rust
+use iroh_node::simple_api;
+use std::path::Path;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 上传文件
+    let file_path = Path::new("test.txt");
+    let share_response = simple_api::upload_file(file_path, None).await?;
+    println!("分享代码: {}", share_response.doc_ticket);
+
+    // 下载文件
+    let result = simple_api::download_file(
+        &share_response.doc_ticket,
+        Some(Path::new("/tmp/downloads")),
+        None,
+    ).await?;
+    println!("下载完成: {}", result);
+
+    Ok(())
+}
+```
+
+### 带进度回调的使用
+
+```rust
+use iroh_node::{simple_api, TransferEvent};
+
+let progress_callback = |event: TransferEvent| {
+    match event {
+        TransferEvent::UploadProgress { id, offset } => {
+            println!("上传进度: {} - {}字节", id, offset);
+        }
+        TransferEvent::UploadDone { id } => {
+            println!("上传完成: {}", id);
+        }
+        _ => {}
+    }
+};
+
+let share_response = simple_api::upload_file_with_progress(
+    file_path,
+    None,
+    progress_callback,
+).await?;
+```
+
+### Tauri集成
+
+```rust
+use iroh_node::adapters::tauri_adapter::TauriAdapter;
+
+// 在tauri应用中使用
+let adapter = TauriAdapter::new(config, emitter).await?;
+let response = adapter.get_share_code().await?;
+```
+
+### Axum集成
+
+```rust
+use iroh_node::adapters::axum_adapter::AxumAdapter;
+
+// 在axum web服务中使用
+let adapter = AxumAdapter::new(config).await?;
+let result = adapter.download_files(request).await?;
+```
+
+## API文档
+
+### Web API端点 (Axum)
+
+- `GET /api/iroh/share` - 获取分享代码
+- `POST /api/iroh/upload` - 上传文件
+- `POST /api/iroh/download` - 下载文件
+- `POST /api/iroh/remove` - 删除文件
+- `POST /api/iroh/session` - 创建进度会话
+- `GET /api/iroh/progress/:session_id` - 进度事件流 (SSE)
+
+### Tauri命令
+
+- `get_share_code()` - 获取分享代码
+- `get_blob(request)` - 下载文件
+- `append_file(request)` - 上传文件
+- `remove_file(request)` - 删除文件
+
+## 技术栈
+
+- **Rust** - 核心语言
+- **iroh** - P2P传输库
+- **tokio** - 异步运行时
+- **axum** - Web框架
+- **tauri** - 桌面应用框架
+- **serde** - 序列化/反序列化
+- **tracing** - 日志系统
+
+## 测试
+
+```bash
+# 运行iroh-node模块测试
+cd iroh-node
+cargo test
+
+# 运行示例
+cargo run --example standalone_usage
+
+# 测试axum集成
+cd ../axum-app
+cargo run
+# 访问 http://localhost:3000/static/iroh-test.html
+
+# 测试tauri集成
+cd ../tauri-app
+npm run tauri dev
+```
+
+## 项目亮点
+
+### 🔧 模块化设计
+- 核心逻辑与UI框架完全解耦
+- 清晰的模块边界和接口定义
+- 支持多种运行环境的适配器模式
+
+### 🚀 性能优化
+- 基于tokio的高性能异步实现
+- 流式传输支持大文件处理
+- 内存高效的进度通知机制
+
+### 🛡️ 类型安全
+- 完整的Rust类型系统支持
+- 编译时错误检查
+- 标准化的错误处理机制
+
+### 📊 实时反馈
+- 完整的传输进度回调系统
+- 支持SSE实时事件流
+- 多种进度通知方式
+
+### 🔌 易于集成
+- 简单的API设计
+- 详细的文档和示例
+- 多种集成方式支持
+
+## 贡献
+
+欢迎提交Issue和Pull Request来改进这个项目。
+
+## 许可证
+
+本项目采用MIT许可证。

@@ -1,228 +1,209 @@
-use anyhow::Result;
-use futures_lite::StreamExt;
-use iroh::{Endpoint, NodeAddr, NodeId, protocol::Router};
-use iroh_gossip::{
-    net::{Event, Gossip, GossipEvent, GossipReceiver},
-    proto::TopicId,
+//! iroh P2P文件传输通用模块
+//! 
+//! 提供跨平台的P2P文件传输功能，支持tauri、axum等不同运行环境
+
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
+
+pub mod core;
+pub mod adapters;
+
+// 重新导出核心类型和功能
+pub use core::{
+    client::IrohClient,
+    error::{IrohTransferError, TransferResult},
+    progress::{DefaultProgressNotifier, ProgressCallback, ProgressNotifier, TransferEvent},
+    types::{
+        DownloadRequest, FileInfo, IrohState, RemoveRequest, ShareResponse, TransferConfig,
+        UploadRequest,
+    },
 };
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let topic = TopicId::from_bytes(rand::random());
-    println!("> opening chat room for topic {topic}");
-    let endpoint = Endpoint::builder().discovery_n0().bind().await?;
+// 重新导出适配器
+pub use adapters::{
+    axum_adapter::{AxumAdapter, WebApiResponse, WebProgressEvent},
+    standalone::{simple_api, StandaloneAdapter},
+    tauri_adapter::TauriAdapter,
+};
 
-    println!("> our node id: {}", endpoint.node_id());
-    let gossip = Gossip::builder().spawn(endpoint.clone()).await?;
-
-    let router = Router::builder(endpoint.clone())
-        .accept(iroh_gossip::ALPN, gossip.clone())
-        .spawn();
-
-    // in our main file, after we create a topic `id`:
-    // print a ticket that includes our own node id and endpoint addresses
-    let Ticket { topic, nodes } = Ticket::from_str("")?;
-
-    let node_ids = nodes.iter().map(|p| p.node_id).collect();
-    if nodes.is_empty() {
-        println!("> waiting for nodes to join us...");
-    } else {
-        println!("> trying to connect to {} nodes...", nodes.len());
-        // add the peer addrs from the ticket to our endpoint's addressbook so that they can be dialed
-        for node in nodes.into_iter() {
-            endpoint.add_node_addr(node)?;
-        }
+// 为了向后兼容，保留原有的tauri特定实现
+#[cfg(feature = "tauri-compat")]
+pub mod legacy {
+    //! 向后兼容的tauri实现
+    
+    use crate::core::{
+        client::IrohClient,
+        error::TransferResult,
+        progress::{ProgressNotifier, TransferEvent},
+        types::{TransferConfig, DownloadRequest, UploadRequest, RemoveRequest},
     };
-    let (sender, receiver) = gossip.subscribe_and_join(topic, node_ids).await?.split();
-    println!("> connected!");
+    use anyhow::Result;
+    use serde::{Deserialize, Serialize};
+    use std::{path::PathBuf, sync::Arc};
+    use tracing::{error, info};
 
-    // subscribe and print loop
-    let my_node_id = endpoint.node_id();
-    tokio::spawn(subscribe_loop(receiver, my_node_id, "lee".clone()));
+    type IrohNode = iroh::node::Node<iroh::blobs::store::fs::Store>;
 
-    // spawn an input thread that reads stdin
-    // create a multi-provider, single-consumer channel
-    let (line_tx, mut line_rx) = tokio::sync::mpsc::channel(1);
-    // and pass the `sender` portion to the `input_loop`
-    std::thread::spawn(move || input_loop(line_tx));
-}
-
-// Handle incoming events
-async fn subscribe_loop(
-    mut receiver: GossipReceiver,
-    my_node_id: NodeId,
-    my_name: Option<String>,
-) -> Result<()> {
-    // keep track of the mapping between `NodeId`s and names
-    let mut names = HashMap::new();
-    // 反向映射：从名字到NodeId
-    let mut name_to_node = HashMap::new();
-
-    // 如果我们有自己的昵称，先添加到映射中
-    if let Some(name) = &my_name {
-        names.insert(my_node_id, name.clone());
-        name_to_node.insert(name.clone(), my_node_id);
+    /// 兼容的AppState结构
+    pub struct AppState {
+        client: Arc<IrohClient>,
     }
 
-    // iterate over all events
-    while let Some(event) = receiver.try_next().await? {
-        // if the Event is a `GossipEvent::Received`, let's deserialize the message:
-        if let Event::Gossip(GossipEvent::Received(msg)) = event {
-            // deserialize the message and match on the
-            // message type:
+    impl AppState {
+        pub async fn new(data_root: PathBuf) -> TransferResult<Self> {
+            let config = TransferConfig {
+                data_root,
+                download_dir: dirs_next::download_dir().map(|d| d.join("quick_send")),
+                verbose_logging: true,
+            };
+            
+            let client = Arc::new(IrohClient::new(config).await?);
+            Ok(Self { client })
         }
-    }
-    Ok(())
-}
 
-fn input_loop(line_tx: tokio::sync::mpsc::Sender<String>) -> Result<()> {
-    let mut buffer = String::new();
-    let stdin = std::io::stdin(); // We get `Stdin` here.
-    loop {
-        stdin.read_line(&mut buffer)?;
-        line_tx.blocking_send(buffer.clone())?;
-        buffer.clear();
-    }
-}
-
-/// 解析消息中的 @mentions
-fn parse_mentions(text: &str) -> Vec<String> {
-    let mut mentions = Vec::new();
-    let words: Vec<&str> = text.split_whitespace().collect();
-
-    for word in words {
-        if word.starts_with('@') && word.len() > 1 {
-            let username = &word[1..]; // 去掉 @ 符号
-            // 移除可能的标点符号
-            let clean_username =
-                username.trim_end_matches(&[',', '.', '!', '?', ':', ';', ')', ']', '}'][..]);
-            if !clean_username.is_empty() {
-                mentions.push(clean_username.to_string());
-            }
+        pub fn client(&self) -> &IrohClient {
+            &self.client
         }
     }
 
-    // 去重
-    mentions.sort();
-    mentions.dedup();
-    mentions
-}
+    /// Tauri事件发射器实现
+    pub struct TauriEventEmitter<R: tauri::Runtime> {
+        handle: tauri::AppHandle<R>,
+    }
 
-/// 解析私人消息格式：/username message
-/// 返回：(目标用户名, 消息内容)，如果不是私人消息格式则返回 None
-fn parse_private_message(text: &str) -> Option<(String, String)> {
-    let text = text.trim();
-    if text.starts_with('/') && text.len() > 1 {
-        // 找到第一个空格的位置
-        if let Some(space_pos) = text.find(' ') {
-            let username = &text[1..space_pos]; // 去掉 / 符号
-            let message = text[space_pos + 1..].trim();
-
-            if !username.is_empty() && !message.is_empty() {
-                return Some((username.to_string(), message.to_string()));
-            }
+    impl<R: tauri::Runtime> TauriEventEmitter<R> {
+        pub fn new(handle: tauri::AppHandle<R>) -> Self {
+            Self { handle }
         }
     }
-    None
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_mentions() {
-        // 测试基本提及
-        assert_eq!(parse_mentions("Hello @alice"), vec!["alice"]);
-
-        // 测试多个提及
-        assert_eq!(
-            parse_mentions("@bob @charlie hello"),
-            vec!["bob", "charlie"]
-        );
-
-        // 测试带标点符号的提及
-        assert_eq!(parse_mentions("Thanks @alice!"), vec!["alice"]);
-        assert_eq!(parse_mentions("Hey @bob, how are you?"), vec!["bob"]);
-
-        // 测试重复提及
-        assert_eq!(parse_mentions("@alice @alice"), vec!["alice"]);
-
-        // 测试空字符串和无提及
-        assert_eq!(parse_mentions(""), Vec::<String>::new());
-        assert_eq!(parse_mentions("Hello world"), Vec::<String>::new());
-
-        // 测试单独的@符号
-        assert_eq!(parse_mentions("@"), Vec::<String>::new());
+    impl<R: tauri::Runtime> crate::adapters::tauri_adapter::TauriEventEmitter for TauriEventEmitter<R> {
+        fn emit_event(&self, event_name: &str, payload: serde_json::Value) {
+            let _ = self.handle.emit_all(event_name, payload);
+        }
     }
 
-    #[test]
-    fn test_parse_private_message() {
-        // 测试基本私人消息
-        assert_eq!(
-            parse_private_message("/alice Hello there!"),
-            Some(("alice".to_string(), "Hello there!".to_string()))
-        );
-
-        // 测试带空格的消息
-        assert_eq!(
-            parse_private_message("/bob How are you doing today?"),
-            Some(("bob".to_string(), "How are you doing today?".to_string()))
-        );
-
-        // 测试前后有空格的情况
-        assert_eq!(
-            parse_private_message("  /charlie  Hi!  "),
-            Some(("charlie".to_string(), "Hi!".to_string()))
-        );
-
-        // 测试非私人消息格式
-        assert_eq!(parse_private_message("Hello world"), None);
-        assert_eq!(parse_private_message("@alice hello"), None);
-        assert_eq!(parse_private_message(""), None);
-
-        // 测试无效格式
-        assert_eq!(parse_private_message("/"), None);
-        assert_eq!(parse_private_message("/alice"), None); // 没有消息内容
-        assert_eq!(parse_private_message("/ hello"), None); // 没有用户名
-    }
-}
-
-// add the `Ticket` code to the bottom of the main file
-#[derive(Debug, Serialize, Deserialize)]
-struct Ticket {
-    topic: TopicId,
-    nodes: Vec<NodeAddr>,
-}
-
-impl Ticket {
-    /// Deserialize from a slice of bytes to a Ticket.
-    fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        serde_json::from_slice(bytes).map_err(Into::into)
+    /// 兼容的tauri命令类型
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct GetBlob {
+        pub blob_ticket: String,
     }
 
-    /// Serialize from a `Ticket` to a `Vec` of bytes.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        serde_json::to_vec(self).expect("serde_json::to_vec is infallible")
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct GetShareCodeResponse {
+        pub doc_ticket: String,
     }
-}
 
-// The `Display` trait allows us to use the `to_string`
-// method on `Ticket`.
-impl fmt::Display for Ticket {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut text = data_encoding::BASE32_NOPAD.encode(&self.to_bytes()[..]);
-        text.make_ascii_lowercase();
-        write!(f, "{}", text)
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct AppendFileRequest {
+        pub file_path: String,
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct RemoveFileRequest {
+        pub file_path: String,
+    }
+
+    /// 兼容的tauri命令实现
+    pub async fn get_blob<R: tauri::Runtime>(
+        state: tauri::State<'_, AppState>,
+        get_blob_request: GetBlob,
+        handle: tauri::AppHandle<R>,
+    ) -> Result<String, String> {
+        let emitter = Arc::new(TauriEventEmitter::new(handle));
+        let adapter = crate::adapters::TauriAdapter::new(
+            TransferConfig::default(),
+            emitter,
+        ).await.map_err(|e| e.to_string())?;
+
+        let request = DownloadRequest {
+            doc_ticket: get_blob_request.blob_ticket,
+            download_dir: None,
+        };
+
+        adapter.download_files(request).await.map_err(|e| e.to_string())
+    }
+
+    pub async fn get_share_code(
+        state: tauri::State<'_, AppState>,
+    ) -> Result<GetShareCodeResponse, String> {
+        let response = state.client().get_share_code().await.map_err(|e| e.to_string())?;
+        Ok(GetShareCodeResponse {
+            doc_ticket: response.doc_ticket,
+        })
+    }
+
+    pub async fn append_file<R: tauri::Runtime>(
+        state: tauri::State<'_, AppState>,
+        append_file_request: AppendFileRequest,
+        handle: tauri::AppHandle<R>,
+    ) -> Result<(), String> {
+        let emitter = Arc::new(TauriEventEmitter::new(handle));
+        let adapter = crate::adapters::TauriAdapter::new(
+            TransferConfig::default(),
+            emitter,
+        ).await.map_err(|e| e.to_string())?;
+
+        let request = UploadRequest {
+            file_path: PathBuf::from(append_file_request.file_path),
+        };
+
+        adapter.upload_file(request).await.map_err(|e| e.to_string())
+    }
+
+    pub async fn remove_file(
+        state: tauri::State<'_, AppState>,
+        remove_file_request: RemoveFileRequest,
+    ) -> Result<(), String> {
+        let request = RemoveRequest {
+            file_path: PathBuf::from(remove_file_request.file_path),
+        };
+
+        state.client().remove_file(request).await.map_err(|e| e.to_string())
     }
 }
 
-// The `FromStr` trait allows us to turn a `str` into
-// a `Ticket`
-impl FromStr for Ticket {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = data_encoding::BASE32_NOPAD.decode(s.to_ascii_uppercase().as_bytes())?;
-        Self::from_bytes(&bytes)
+/// 便捷的初始化函数
+pub async fn init_iroh_client(config: TransferConfig) -> TransferResult<IrohClient> {
+    IrohClient::new(config).await
+}
+
+/// 便捷的配置构建器
+pub struct ConfigBuilder {
+    config: TransferConfig,
+}
+
+impl ConfigBuilder {
+    pub fn new() -> Self {
+        Self {
+            config: TransferConfig::default(),
+        }
+    }
+
+    pub fn data_root<P: Into<std::path::PathBuf>>(mut self, path: P) -> Self {
+        self.config.data_root = path.into();
+        self
+    }
+
+    pub fn download_dir<P: Into<std::path::PathBuf>>(mut self, path: Option<P>) -> Self {
+        self.config.download_dir = path.map(|p| p.into());
+        self
+    }
+
+    pub fn verbose_logging(mut self, enabled: bool) -> Self {
+        self.config.verbose_logging = enabled;
+        self
+    }
+
+    pub fn build(self) -> TransferConfig {
+        self.config
+    }
+}
+
+impl Default for ConfigBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
