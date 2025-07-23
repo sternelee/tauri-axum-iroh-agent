@@ -1,0 +1,51 @@
+[package]
+name = "rig-agent"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "rig-agent"
+path = "src/main.rs"
+
+[lib]
+name = "rig_agent"
+path = "src/lib.rs"
+
+[dependencies]
+rig-core = "0.15"
+rig-sqlite = "0.1"
+# AI 提供商支持
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+thiserror = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Tauri 支持（可选）
+tauri = { version = "2.7", optional = true }
+
+# Axum 支持（可选）
+axum = { version = "0.7", optional = true, features = ["json", "query"] }
+axum-extra = { version = "0.9", optional = true, features = ["typed-header"] }
+tower = { version = "0.4", optional = true }
+tower-http = { version = "0.5", optional = true, features = ["fs"] }
+tokio-stream = { version = "0.1", optional = true }
+reqwest = { version = "0.11", optional = true, features = ["json"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tracing-test = "0.2"
+tokio-test = "0.4"
+
+[[bench]]
+name = "agent_benchmarks"
+harness = false
+
+[features]
+default = []
+tauri-support = ["tauri"]
+axum-support = ["axum", "axum-extra", "tower", "tokio-stream"]
+full = ["tauri-support", "axum-support"]

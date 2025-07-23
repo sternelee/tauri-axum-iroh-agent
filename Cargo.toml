@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-    "axum-app", "iroh-node",
+    "axum-app", "iroh-node", "rig-agent",
     "tauri-app/src-tauri", 
 ]
