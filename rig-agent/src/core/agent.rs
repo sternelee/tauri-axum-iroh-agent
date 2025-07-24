@@ -102,7 +102,11 @@ impl AgentManager {
     }
 
     /// 创建新的 Agent
-    pub async fn create_agent(&mut self, agent_id: String, config: Option<AgentConfig>) -> AgentResult<()> {
+    pub async fn create_agent(
+        &mut self,
+        agent_id: String,
+        config: Option<AgentConfig>,
+    ) -> AgentResult<()> {
         let mut agents = self.agents.write().await;
 
         if agents.contains_key(&agent_id) {
@@ -112,13 +116,11 @@ impl AgentManager {
         let agent_config = config.unwrap_or_else(|| self.default_config.clone());
         let provider = self.create_provider(&agent_config).await?;
 
-        let mut agent_builder = rig_core::agent::AgentBuilder::new(
-            agent_config.model.clone(),
-            provider,
-        )
-        .with_preamble(agent_config.preamble.clone().unwrap_or_default())
-        .with_temperature(agent_config.temperature.unwrap_or(0.7))
-        .with_max_tokens(agent_config.max_tokens.unwrap_or(1024));
+        let mut agent_builder =
+            rig_core::agent::AgentBuilder::new(agent_config.model.clone(), provider)
+                .with_preamble(agent_config.preamble.clone().unwrap_or_default())
+                .with_temperature(agent_config.temperature.unwrap_or(0.7))
+                .with_max_tokens(agent_config.max_tokens.unwrap_or(1024));
 
         // 添加静态工具
         let static_tools = self.tool_manager.get_static_tools();
@@ -213,24 +215,23 @@ impl AgentManager {
         }
 
         // 调用 rig-core AI 模型
-        debug!("准备调用 AI 模型，消息数量: {}", prompt_request.history().len());
+        debug!(
+            "准备调用 AI 模型，消息数量: {}",
+            prompt_request.history().len()
+        );
         let ai_start_time = std::time::Instant::now();
 
-        let response = agent
-            .rig_agent
-            .chat(prompt_request)
-            .await
-            .map_err(|e| {
-                error!("AI 模型调用失败，Agent: {}, 错误: {}", agent_id, e);
-                AgentError::other(format!("AI 模型调用失败: {}", e))
-            })?;
+        let response = agent.rig_agent.chat(prompt_request).await.map_err(|e| {
+            error!("AI 模型调用失败，Agent: {}, 错误: {}", agent_id, e);
+            AgentError::other(format!("AI 模型调用失败: {}", e))
+        })?;
 
         // 处理工具调用
         let mut completion = match response.message_type() {
             rig_core::agent::MessageType::ToolCall => {
                 self.handle_tool_calls(agent, response, &agent_id).await?
-            },
-            _ => response.content().to_string()
+            }
+            _ => response.content().to_string(),
         };
 
         let ai_duration = ai_start_time.elapsed();
