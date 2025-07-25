@@ -1,13 +1,12 @@
-# Tauri-Axum-Iroh Agent
+# Tauri-Iroh Agent
 
-这是一个展示如何将iroh P2P文件传输和实时聊天功能集成到不同运行环境的项目。项目包含了一个通用的iroh模块，同时支持文件传输和实时聊天，以及在tauri桌面应用和axum web服务中的集成示例。
+这是一个展示如何将iroh P2P文件传输和实时聊天功能集成到不同运行环境的项目。项目包含了一个通用的iroh模块，同时支持文件传输和实时聊天，以及在tauri桌面应用中的集成示例。
 
 ## 项目结构
 
 ```
 ├── iroh-node/          # 通用iroh P2P文件传输模块
 ├── tauri-app/          # Tauri桌面应用示例
-├── axum-app/           # Axum Web服务示例
 └── README.md           # 项目说明文档
 ```
 
@@ -19,7 +18,7 @@
 
 1. ✅ **核心逻辑解耦** - 将P2P传输逻辑从tauri框架中完全分离
 2. ✅ **标准化接口** - 设计了统一的API接口，支持多种运行环境
-3. ✅ **适配器模式** - 创建了tauri、axum、独立运行等多种适配器
+3. ✅ **适配器模式** - 创建了tauri、独立运行等多种适配器
 4. ✅ **错误处理** - 实现了完整的错误处理机制和类型安全
 5. ✅ **进度回调** - 保留了完整的传输进度通知功能
 6. ✅ **模块化设计** - 提供了清晰的模块导出和类型定义
@@ -45,7 +44,6 @@ iroh-node/
 │   ├── adapters/               # 适配器层
 │   │   ├── standalone.rs       # 独立运行适配器
 │   │   ├── tauri_adapter.rs    # Tauri适配器
-│   │   └── axum_adapter.rs     # Axum适配器
 │   └── lib.rs                  # 模块导出
 ├── examples/
 │   ├── standalone_usage.rs     # 文件传输示例
@@ -79,17 +77,6 @@ cd tauri-app
 npm install
 npm run tauri dev
 ```
-
-### 3. 运行Axum Web服务
-
-```bash
-cd axum-app
-cargo run
-```
-
-然后访问以下页面测试功能：
-- `http://localhost:3000/static/iroh-test.html` - 文件传输功能测试
-- `http://localhost:3000/static/chat-test.html` - 实时聊天功能测试
 
 ### 4. 运行聊天功能示例
 
@@ -159,16 +146,6 @@ let adapter = TauriAdapter::new(config, emitter).await?;
 let response = adapter.get_share_code().await?;
 ```
 
-### Axum集成
-
-```rust
-use iroh_node::adapters::axum_adapter::AxumAdapter;
-
-// 在axum web服务中使用
-let adapter = AxumAdapter::new(config).await?;
-let result = adapter.download_files(request).await?;
-```
-
 ### 聊天功能使用
 
 ```rust
@@ -213,26 +190,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## API文档
 
-### Web API端点 (Axum)
-
-#### 文件传输API
-- `GET /api/iroh/share` - 获取分享代码
-- `POST /api/iroh/upload` - 上传文件
-- `POST /api/iroh/download` - 下载文件
-- `POST /api/iroh/remove` - 删除文件
-- `POST /api/iroh/session` - 创建进度会话
-- `GET /api/iroh/progress/:session_id` - 进度事件流 (SSE)
-
-#### 聊天API
-- `POST /api/chat/rooms` - 创建聊天室
-- `GET /api/chat/rooms` - 获取聊天室列表
-- `POST /api/chat/rooms/join` - 加入聊天室
-- `POST /api/chat/rooms/leave` - 离开聊天室
-- `POST /api/chat/messages` - 发送消息
-- `GET /api/chat/messages/:room_id` - 获取消息历史
-- `POST /api/chat/session` - 创建聊天事件会话
-- `GET /api/chat/events/:session_id` - 聊天事件流 (SSE)
-
 ### Tauri命令
 
 - `get_share_code()` - 获取分享代码
@@ -246,7 +203,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - **iroh** - P2P传输和gossip协议库
 - **iroh-gossip** - P2P实时通信协议
 - **tokio** - 异步运行时
-- **axum** - Web框架
 - **tauri** - 桌面应用框架
 - **serde** - 序列化/反序列化
 - **tracing** - 日志系统
@@ -262,11 +218,6 @@ cargo test
 
 # 运行示例
 cargo run --example standalone_usage
-
-# 测试axum集成
-cd ../axum-app
-cargo run
-# 访问 http://localhost:3000/static/iroh-test.html
 
 # 测试tauri集成
 cd ../tauri-app

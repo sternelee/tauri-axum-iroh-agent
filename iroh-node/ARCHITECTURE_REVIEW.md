@@ -13,7 +13,7 @@
 
 ### 2. 通用性设计
 - **跨平台支持**: 不依赖特定UI框架，可在多种环境中使用
-- **适配器模式**: 支持tauri、axum、独立运行等多种环境
+- **适配器模式**: 支持tauri、独立运行等多种环境
 - **配置驱动**: 通过配置文件和构建器模式实现灵活配置
 
 ### 3. 类型安全
@@ -85,8 +85,6 @@ pub struct StandaloneAdapter { /* ... */ }
 // Tauri适配器
 pub struct TauriAdapter<E: TauriEventEmitter> { /* ... */ }
 
-// Axum适配器
-pub struct AxumAdapter { /* ... */ }
 ```
 
 **优点**:

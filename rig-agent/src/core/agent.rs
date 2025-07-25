@@ -1,18 +1,18 @@
 //! 核心 Agent 实现 - 基于 rig-core
 
 use crate::core::types::{
-    AgentConfig, AgentMessage, AgentResponse, AgentRole, ConversationHistory, MessageType,
-    TokenUsage, ToolCall, ToolResult,
+    AgentConfig, AgentMessage, AgentResponse, AgentRole, ConversationHistory,
+    ToolCall, ToolResult,
 };
 use crate::error::{AgentError, AgentResult};
 use crate::tools::ToolManager;
-use rig::{
-client::builder::DynClientBuilder, completion::Prompt
-    completion::{CompletionModel, Message},
+use rig_core::{
+    agent::Agent as RigAgent,
+    client::builder::DynClientBuilder,
+    completion::CompletionModel,
     providers::{anthropic, cohere, gemini, openai},
     tool::Tool,
 };
-use serde_json::Value;
 use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, instrument, warn};
@@ -28,19 +28,16 @@ pub struct AgentManager {
 pub struct Agent {
     id: String,
     config: AgentConfig,
-    rig_agent: rig_core::agent::Agent,
+    rig_agent: RigAgent,
     conversation_history: Vec<AgentMessage>,
     created_at: chrono::DateTime<chrono::Utc>,
     last_activity: chrono::DateTime<chrono::Utc>,
-    dynamic_context: Option<rig_core::agent::DynamicContext>,
-    dynamic_tools: Option<rig_core::agent::DynamicTools>,
 }
 
 impl AgentManager {
     /// 创建新的 Agent 管理器
     pub fn new(default_config: AgentConfig) -> Self {
-        let mut tool_manager = ToolManager::new();
-        tool_manager.register_default_tools();
+        let tool_manager = ToolManager::new();
 
         Self {
             default_config,
@@ -51,7 +48,7 @@ impl AgentManager {
 
     /// 创建 AI 提供商实例
     #[instrument(skip(self), fields(provider = %config.provider.as_deref().unwrap_or("openai"), model = %config.model))]
-    async fn create_provider<T: CompletionModel + Send + Sync>(
+    async fn create_provider(
         &self,
         config: &AgentConfig,
     ) -> AgentResult<Box<dyn CompletionModel + Send + Sync>> {
@@ -110,30 +107,26 @@ impl AgentManager {
         let mut agents = self.agents.write().await;
 
         if agents.contains_key(&agent_id) {
-            return Err(AgentError::AgentAlreadyExists(agent_id));
+            return Err(AgentError::other(format!("Agent 已存在: {}", agent_id)));
         }
 
         let agent_config = config.unwrap_or_else(|| self.default_config.clone());
         let provider = self.create_provider(&agent_config).await?;
-        let multi_client = DynClientBuilder::new();
+        
+        // 使用 DynClientBuilder 创建动态 agent
+        let mut agent_builder = DynClientBuilder::new()
+            .agent(provider)
+            .preamble(agent_config.preamble.clone().unwrap_or_default())
+            .temperature(agent_config.temperature.unwrap_or(0.7))
+            .max_tokens(agent_config.max_tokens.unwrap_or(1024));
 
-        let mut agent_builder = multi_client.agent(provider, agent_config.model.clone())
-                .with_preamble(agent_config.preamble.clone().unwrap_or_default())
-                .with_temperature(agent_config.temperature.unwrap_or(0.7))
-                .with_max_tokens(agent_config.max_tokens.unwrap_or(1024));
-
-        // 添加静态工具
-        let static_tools = self.tool_manager.get_static_tools();
-        if !static_tools.is_empty() {
-            agent_builder = agent_builder.with_static_tools(static_tools);
+        // 添加工具（如果有）
+        let available_tools = self.tool_manager.get_available_tools();
+        if !available_tools.is_empty() {
+            agent_builder = agent_builder.tools(available_tools);
         }
 
-        // 添加静态上下文（如果有）
-        if let Some(static_context) = &agent_config.static_context {
-            agent_builder = agent_builder.with_static_context(static_context.clone());
-        }
-
-        let rig_agent = agent_builder.build()?;
+        let rig_agent = agent_builder.build();
 
         agents.insert(
             agent_id.clone(),
@@ -144,8 +137,6 @@ impl AgentManager {
                 conversation_history: Vec::new(),
                 created_at: chrono::Utc::now(),
                 last_activity: chrono::Utc::now(),
-                dynamic_context: None,
-                dynamic_tools: None,
             },
         );
 
@@ -193,46 +184,14 @@ impl AgentManager {
             agent.conversation_history.len()
         );
 
-        // 构建对话上下文
-        let mut messages = Vec::new();
-
-        // 添加系统提示
-        if let Some(system_prompt) = &agent.config.system_prompt {
-            messages.push(Message::new_system_message(system_prompt.clone()));
-        }
-
-        // 添加历史消息
-        for msg in &agent.conversation_history {
-            match msg.role {
-                AgentRole::User => {
-                    messages.push(Message::new_user_message(msg.content.clone()));
-                }
-                AgentRole::Assistant => {
-                    messages.push(Message::new_assistant_message(msg.content.clone()));
-                }
-                _ => {} // 暂时忽略其他角色
-            }
-        }
-
         // 调用 rig-core AI 模型
-        debug!(
-            "准备调用 AI 模型，消息数量: {}",
-            prompt_request.history().len()
-        );
+        debug!("准备调用 AI 模型");
         let ai_start_time = std::time::Instant::now();
 
-        let response = agent.rig_agent.chat(prompt_request).await.map_err(|e| {
+        let response = agent.rig_agent.chat(message).await.map_err(|e| {
             error!("AI 模型调用失败，Agent: {}, 错误: {}", agent_id, e);
             AgentError::other(format!("AI 模型调用失败: {}", e))
         })?;
-
-        // 处理工具调用
-        let mut completion = match response.message_type() {
-            rig_core::agent::MessageType::ToolCall => {
-                self.handle_tool_calls(agent, response, &agent_id).await?
-            }
-            _ => response.content().to_string(),
-        };
 
         let ai_duration = ai_start_time.elapsed();
         info!(
@@ -240,29 +199,23 @@ impl AgentManager {
             agent_id, ai_duration
         );
 
-        let mut response_content = completion.choice.message.content;
+        let response_content = response.content().to_string();
         let mut tool_calls_result = None;
 
         debug!("AI 响应内容长度: {}", response_content.len());
 
         // 处理工具调用
-        if let Some(tool_calls) = &completion.choice.message.tool_calls {
+        if let Some(tool_calls) = response.tool_calls() {
             info!("检测到工具调用，数量: {}", tool_calls.len());
             let mut executed_tools = Vec::new();
-            let mut tool_results = Vec::new();
 
-            for (index, tool_call) in tool_calls.iter().enumerate() {
-                debug!(
-                    "执行工具调用 {}/{}: {}",
-                    index + 1,
-                    tool_calls.len(),
-                    tool_call.function.name
-                );
+            for tool_call in tool_calls {
+                debug!("执行工具调用: {}", tool_call.name());
 
                 let rig_tool_call = ToolCall {
-                    id: tool_call.id.clone(),
-                    name: tool_call.function.name.clone(),
-                    arguments: tool_call.function.arguments.clone(),
+                    id: tool_call.id().to_string(),
+                    name: tool_call.name().to_string(),
+                    arguments: tool_call.arguments().to_string(),
                     timestamp: chrono::Utc::now(),
                 };
 
@@ -270,67 +223,26 @@ impl AgentManager {
                 let tool_result = self.tool_manager.execute_tool(&rig_tool_call).await;
                 let tool_duration = tool_start_time.elapsed();
 
-                let result = match tool_result {
+                match tool_result {
                     Ok(result) => {
                         info!(
                             "工具执行成功: {}, 耗时: {:?}",
-                            tool_call.function.name, tool_duration
+                            tool_call.name(), tool_duration
                         );
                         debug!("工具执行结果: {}", result.result);
-
-                        tool_results.push(ToolResult {
-                            call_id: tool_call.id.clone(),
-                            tool_name: tool_call.function.name.clone(),
-                            result: result.result.clone(),
-                            success: true,
-                            error: None,
-                            timestamp: chrono::Utc::now(),
-                            duration_ms: tool_duration.as_millis() as u64,
-                        });
-                        result.result
                     }
                     Err(e) => {
                         error!(
                             "工具执行失败: {}, 错误: {}, 耗时: {:?}",
-                            tool_call.function.name, e, tool_duration
+                            tool_call.name(), e, tool_duration
                         );
-                        let error_msg = format!("工具执行失败: {}", e);
-
-                        tool_results.push(ToolResult {
-                            call_id: tool_call.id.clone(),
-                            tool_name: tool_call.function.name.clone(),
-                            result: String::new(),
-                            success: false,
-                            error: Some(error_msg.clone()),
-                            timestamp: chrono::Utc::now(),
-                            duration_ms: tool_duration.as_millis() as u64,
-                        });
-                        error_msg
                     }
-                };
+                }
 
-                executed_tools.push(ToolCall {
-                    id: tool_call.id.clone(),
-                    name: tool_call.function.name.clone(),
-                    arguments: tool_call.function.arguments.clone(),
-                    timestamp: chrono::Utc::now(),
-                });
+                executed_tools.push(rig_tool_call);
             }
-
-            // 添加工具调用消息到历史
-            let tool_call_message = AgentMessage::tool_call(executed_tools.clone());
-            agent.conversation_history.push(tool_call_message);
-
-            // 添加工具结果消息到历史
-            let tool_result_message = AgentMessage::tool_result(tool_results.clone());
-            agent.conversation_history.push(tool_result_message);
 
             tool_calls_result = Some(executed_tools);
-
-            // 如果有工具调用，可能需要再次调用 AI 来生成最终响应
-            if response_content.is_empty() {
-                response_content = "已执行工具调用，请查看结果。".to_string();
-            }
         }
 
         let assistant_message = AgentMessage::assistant(response_content.clone());

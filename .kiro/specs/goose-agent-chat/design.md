@@ -22,7 +22,6 @@ graph TB
     D --> G[StreamHandler]
     D --> H[HistoryManager]
     
-    I[AxumAdapter] --> A
     J[TauriAdapter] --> A
     
     K[HTTP Routes] --> I
@@ -128,35 +127,6 @@ pub trait StreamHandler {
 ```
 
 ### 5. Platform Adapters
-
-#### Axum Adapter
-
-```rust
-pub struct AxumChatAdapter {
-    manager: Arc<GooseAgentManager>,
-    message_handler: Arc<MessageHandler>,
-}
-
-impl AxumChatAdapter {
-    pub fn new(config: AgentConfig) -> Result<Self, GooseError>;
-    pub async fn handle_chat_request(&self, request: ChatRequest) -> Result<ChatResponse, GooseError>;
-    pub async fn handle_stream_request(&self, request: ChatRequest) -> Result<impl Stream<Item = StreamResponse>, GooseError>;
-}
-
-#[derive(Deserialize)]
-pub struct ChatRequest {
-    pub message: String,
-    pub conversation_id: Option<String>,
-    pub stream: Option<bool>,
-}
-
-#[derive(Serialize)]
-pub struct ChatResponse {
-    pub response: String,
-    pub conversation_id: String,
-    pub timestamp: u64,
-}
-```
 
 #### Tauri Adapter
 
@@ -269,7 +239,6 @@ impl GooseAgentManager {
 
 ### Integration Testing
 
-1. **Axum Integration**: Test HTTP endpoints with real agent responses
 2. **Tauri Integration**: Test tauri commands and event emission
 3. **Streaming Tests**: Test streaming functionality across both platforms
 4. **Concurrency Tests**: Test thread safety under concurrent load

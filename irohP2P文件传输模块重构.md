@@ -15,7 +15,7 @@
 ## Tech Stack
 
 {
-  "Web": null
+"Web": null
 }
 
 ## Design
@@ -24,11 +24,11 @@
 
 ## Plan
 
-Note: 
+Note:
 
 - [ ] is holding
 - [/] is doing
-- [X] is done
+- [x] is done
 
 ---
 
@@ -47,7 +47,5 @@ Note:
 [X] 编写单元测试和集成测试
 
 [X] 更新tauri-app以使用新的通用模块
-
-[X] 为axum-app创建集成示例
 
 [X] 编写模块使用文档和API说明

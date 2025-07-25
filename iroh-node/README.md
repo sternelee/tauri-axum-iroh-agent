@@ -8,7 +8,7 @@
 - 🔄 **P2P文件传输** - 基于iroh库的去中心化文件传输
 - 📊 **进度回调支持** - 完整的传输进度通知机制
 - 🛡️ **错误处理** - 标准化的错误处理和类型安全
-- 🔌 **适配器模式** - 支持tauri、axum、独立运行等多种环境
+- 🔌 **适配器模式** - 支持tauri、独立运行等多种环境
 - 🧪 **测试覆盖** - 包含单元测试和集成测试
 
 ## 快速开始
@@ -83,7 +83,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 - **`adapters::standalone`** - 独立运行适配器
 - **`adapters::tauri_adapter`** - Tauri框架适配器
-- **`adapters::axum_adapter`** - Axum Web框架适配器
 
 ## API文档
 
@@ -235,34 +234,6 @@ let adapter = TauriAdapter::new(config, emitter).await?;
     append_file,
     remove_file
 ])
-```
-
-### Axum集成
-
-1. 在`Cargo.toml`中添加依赖：
-
-```toml
-[dependencies]
-iroh-node = { path = "../iroh-node" }
-```
-
-2. 创建适配器和路由：
-
-```rust
-use iroh_node::adapters::axum_adapter::AxumAdapter;
-
-let config = ConfigBuilder::new()
-    .data_root("/tmp/iroh_data")
-    .build();
-
-let adapter = AxumAdapter::new(config).await?;
-
-// 创建路由
-let app = Router::new()
-    .route("/api/iroh/share", get(get_share_code))
-    .route("/api/iroh/upload", post(upload_file))
-    .route("/api/iroh/download", post(download_files))
-    .with_state(adapter);
 ```
 
 ## 错误处理

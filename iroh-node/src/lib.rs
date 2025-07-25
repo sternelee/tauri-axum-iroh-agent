@@ -1,6 +1,6 @@
 //! iroh P2P文件传输通用模块
 //!
-//! 提供跨平台的P2P文件传输功能，支持tauri、axum等不同运行环境
+//! 提供跨平台的P2P文件传输功能，支持tauri等不同运行环境
 
 #![cfg_attr(
     all(not(debug_assertions), target_os = "windows"),
@@ -29,7 +29,6 @@ pub use core::{
 
 // 重新导出适配器
 pub use adapters::{
-    axum_adapter::{AxumAdapter, WebApiResponse, WebProgressEvent},
     standalone::{StandaloneAdapter, simple_api},
     tauri_adapter::TauriAdapter,
 };

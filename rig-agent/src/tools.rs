@@ -229,6 +229,7 @@ impl Default for BuiltinTools {
 }
 
 /// 自定义工具特征
+#[async_trait::async_trait]
 pub trait CustomTool: Send + Sync {
     /// 工具名称
     fn name(&self) -> &str;
