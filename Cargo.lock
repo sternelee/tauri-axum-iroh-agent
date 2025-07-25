@@ -1097,8 +1097,6 @@ dependencies = [
  "http 1.3.1",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.6.0",
- "hyper-util",
  "itoa",
  "matchit 0.7.3",
  "memchr",
@@ -1107,11 +1105,7 @@ dependencies = [
  "pin-project-lite",
  "rustversion",
  "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_urlencoded",
  "sync_wrapper 1.0.2",
- "tokio",
  "tower 0.5.2",
  "tower-layer",
  "tower-service",
@@ -1157,6 +1151,7 @@ name = "axum-app"
 version = "0.1.0"
 dependencies = [
  "axum 0.8.4",
+ "iroh-node",
  "serde",
  "thiserror 2.0.12",
  "tokio",
@@ -9546,7 +9541,7 @@ name = "rig-agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "axum 0.7.9",
+ "axum 0.8.4",
  "axum-extra",
  "chrono",
  "criterion",

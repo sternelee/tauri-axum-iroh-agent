@@ -133,11 +133,11 @@ pub async fn upload_file(
 
     while let Some(field) = multipart.next_field().await.unwrap() {
         let name = field.name().unwrap_or("").to_string();
-        
+
         if name == "file" {
             let file_name = field.file_name().unwrap_or("uploaded_file").to_string();
             let data = field.bytes().await.unwrap();
-            
+
             // 保存到临时目录
             let temp_path = std::env::temp_dir().join(&file_name);
             tokio::fs::write(&temp_path, data).await.unwrap();
@@ -241,22 +241,20 @@ pub async fn progress_stream(
                 .take_while(|event| {
                     // 当收到结束事件时停止流
                     if let Ok(sse_event) = event {
-                        if let Some(event_type) = sse_event.event() {
+                        if let Some(event_type) = sse_event.event("ok") {
                             return event_type != "end";
                         }
                     }
                     true
                 });
-            
+
             Box::pin(stream) as Box<dyn tokio_stream::Stream<Item = _> + Send>
         }
         None => {
             warn!("未找到会话ID: {}", session_id);
-            let error_stream = tokio_stream::once(Ok(
-                axum::response::sse::Event::default()
-                    .event("error")
-                    .data("session_not_found")
-            ));
+            let error_stream = tokio_stream::once(Ok(axum::response::sse::Event::default()
+                .event("error")
+                .data("session_not_found")));
             Box::pin(error_stream) as Box<dyn tokio_stream::Stream<Item = _> + Send>
         }
     };
@@ -280,12 +278,12 @@ pub async fn cleanup_session(
     Path(session_id): Path<String>,
 ) -> Json<WebApiResponse<String>> {
     state.adapter.cleanup_session(&session_id);
-    
+
     {
         let mut sessions = state.sessions.lock().unwrap();
         sessions.remove(&session_id);
     }
-    
+
     Json(WebApiResponse::success("会话已清理".to_string()))
 }
 
@@ -297,6 +295,9 @@ pub fn create_iroh_routes() -> Router<IrohAppState> {
         .route("/api/iroh/upload", post(upload_file))
         .route("/api/iroh/remove", post(remove_file))
         .route("/api/iroh/session", post(create_session))
-        .route("/api/iroh/session/:session_id/cleanup", post(cleanup_session))
+        .route(
+            "/api/iroh/session/:session_id/cleanup",
+            post(cleanup_session),
+        )
         .route("/api/iroh/progress/:session_id", get(progress_stream))
 }
