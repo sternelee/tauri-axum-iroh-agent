@@ -286,13 +286,13 @@ impl ToolManager {
         tools
     }
 
-    /// 获取可用工具（用于 rig-core）
-    pub fn get_available_tools(&self) -> Vec<rig_core::tool::Tool> {
+    /// 获取可用工具（用于 rig）
+    pub fn get_available_tools(&self) -> Vec<rig::tool::Tool> {
         let mut tools = Vec::new();
         
         // 添加内置工具
         for tool_def in self.builtin_tools.get_all_tools() {
-            if let Ok(tool) = rig_core::tool::Tool::new(
+            if let Ok(tool) = rig::tool::Tool::new(
                 tool_def.name,
                 tool_def.description,
                 tool_def.parameters,
@@ -303,7 +303,7 @@ impl ToolManager {
         
         // 添加自定义工具
         for custom_tool in self.custom_tools.values() {
-            if let Ok(tool) = rig_core::tool::Tool::new(
+            if let Ok(tool) = rig::tool::Tool::new(
                 custom_tool.name().to_string(),
                 custom_tool.description().to_string(),
                 custom_tool.parameters(),

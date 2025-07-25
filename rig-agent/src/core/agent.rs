@@ -1,21 +1,17 @@
 //! 核心 Agent 实现 - 基于 rig-core
 
-use crate::core::types::{
-    AgentConfig, AgentMessage, AgentResponse, AgentRole, ConversationHistory,
-    ToolCall, ToolResult,
-};
+use crate::core::types::{AgentConfig, AgentMessage, AgentResponse, ConversationHistory, ToolCall};
 use crate::error::{AgentError, AgentResult};
 use crate::tools::ToolManager;
-use rig_core::{
+use rig::{
     agent::Agent as RigAgent,
-    client::builder::DynClientBuilder,
     completion::CompletionModel,
     providers::{anthropic, cohere, gemini, openai},
     tool::Tool,
 };
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument};
 
 /// Agent 管理器，负责创建和管理 Agent 实例
 pub struct AgentManager {
@@ -28,7 +24,7 @@ pub struct AgentManager {
 pub struct Agent {
     id: String,
     config: AgentConfig,
-    rig_agent: RigAgent,
+    rig_agent: RigAgent<Box<dyn CompletionModel + Send + Sync>>,
     conversation_history: Vec<AgentMessage>,
     created_at: chrono::DateTime<chrono::Utc>,
     last_activity: chrono::DateTime<chrono::Utc>,
@@ -46,40 +42,40 @@ impl AgentManager {
         }
     }
 
-    /// 创建 AI 提供商实例
+    /// 创建完成模型
     #[instrument(skip(self), fields(provider = %config.provider.as_deref().unwrap_or("openai"), model = %config.model))]
-    async fn create_provider(
+    fn create_completion_model(
         &self,
         config: &AgentConfig,
     ) -> AgentResult<Box<dyn CompletionModel + Send + Sync>> {
         let provider = config.provider.as_deref().unwrap_or("openai");
 
-        info!("正在创建 AI 提供商实例: {} - {}", provider, config.model);
+        info!("正在创建完成模型: {} - {}", provider, config.model);
 
         let result = match provider.to_lowercase().as_str() {
             "openai" => {
-                debug!("初始化 OpenAI 客户端");
+                debug!("创建 OpenAI 完成模型");
                 let client = openai::Client::from_env();
-                let model = client.model(&config.model);
-                Ok(Box::new(model))
+                let model = client.completion_model(&config.model);
+                Ok(Box::new(model) as Box<dyn CompletionModel + Send + Sync>)
             }
             "anthropic" => {
-                debug!("初始化 Anthropic 客户端");
+                debug!("创建 Anthropic 完成模型");
                 let client = anthropic::Client::from_env();
-                let model = client.model(&config.model);
-                Ok(Box::new(model))
+                let model = client.completion_model(&config.model);
+                Ok(Box::new(model) as Box<dyn CompletionModel + Send + Sync>)
             }
             "cohere" => {
-                debug!("初始化 Cohere 客户端");
+                debug!("创建 Cohere 完成模型");
                 let client = cohere::Client::from_env();
-                let model = client.model(&config.model);
-                Ok(Box::new(model))
+                let model = client.completion_model(&config.model);
+                Ok(Box::new(model) as Box<dyn CompletionModel + Send + Sync>)
             }
             "gemini" => {
-                debug!("初始化 Gemini 客户端");
+                debug!("创建 Gemini 完成模型");
                 let client = gemini::Client::from_env();
-                let model = client.model(&config.model);
-                Ok(Box::new(model))
+                let model = client.completion_model(&config.model);
+                Ok(Box::new(model) as Box<dyn CompletionModel + Send + Sync>)
             }
             _ => {
                 error!("不支持的 AI 提供商: {}", provider);
@@ -91,8 +87,8 @@ impl AgentManager {
         };
 
         match &result {
-            Ok(_) => info!("AI 提供商实例创建成功: {} - {}", provider, config.model),
-            Err(e) => error!("AI 提供商实例创建失败: {}", e),
+            Ok(_) => info!("完成模型创建成功: {} - {}", provider, config.model),
+            Err(e) => error!("完成模型创建失败: {}", e),
         }
 
         result
@@ -111,11 +107,10 @@ impl AgentManager {
         }
 
         let agent_config = config.unwrap_or_else(|| self.default_config.clone());
-        let provider = self.create_provider(&agent_config).await?;
-        
-        // 使用 DynClientBuilder 创建动态 agent
-        let mut agent_builder = DynClientBuilder::new()
-            .agent(provider)
+        let completion_model = self.create_completion_model(&agent_config)?;
+
+        // 创建 Agent 构建器
+        let mut agent_builder = RigAgent::builder(completion_model)
             .preamble(agent_config.preamble.clone().unwrap_or_default())
             .temperature(agent_config.temperature.unwrap_or(0.7))
             .max_tokens(agent_config.max_tokens.unwrap_or(1024));
@@ -227,14 +222,17 @@ impl AgentManager {
                     Ok(result) => {
                         info!(
                             "工具执行成功: {}, 耗时: {:?}",
-                            tool_call.name(), tool_duration
+                            tool_call.name(),
+                            tool_duration
                         );
                         debug!("工具执行结果: {}", result.result);
                     }
                     Err(e) => {
                         error!(
                             "工具执行失败: {}, 错误: {}, 耗时: {:?}",
-                            tool_call.name(), e, tool_duration
+                            tool_call.name(),
+                            e,
+                            tool_duration
                         );
                     }
                 }
