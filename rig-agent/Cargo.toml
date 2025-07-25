@@ -12,7 +12,6 @@ name = "rig_agent"
 path = "src/lib.rs"
 
 [dependencies]
-axum = "0.8.4"
 rig-core = "0.15"
 rig-sqlite = "0.1"
 # AI 提供商支持
@@ -28,8 +27,6 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 # Tauri 支持（可选）
 tauri = { version = "2.7", optional = true }
 
-# Axum 支持（可选）
-axum-extra = { version = "0.9", optional = true, features = ["typed-header"] }
 tower = { version = "0.4", optional = true }
 tower-http = { version = "0.5", optional = true, features = ["fs"] }
 tokio-stream = { version = "0.1", optional = true }
@@ -47,5 +44,3 @@ harness = false
 [features]
 default = []
 tauri-support = ["tauri"]
-axum-support = ["axum", "axum-extra", "tower", "tokio-stream"]
-full = ["tauri-support", "axum-support"]

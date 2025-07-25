@@ -151,11 +151,11 @@ impl CustomTool for MyCustomTool {
     fn name(&self) -> &str {
         "my_tool"
     }
-    
+
     fn description(&self) -> &str {
         "我的自定义工具"
     }
-    
+
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
@@ -168,7 +168,7 @@ impl CustomTool for MyCustomTool {
             "required": ["input"]
         })
     }
-    
+
     async fn execute(&self, arguments: &str) -> AgentResult<String> {
         // 工具逻辑
         Ok("工具执行结果".to_string())
@@ -320,7 +320,6 @@ rig-agent/
 │   ├── tools/          # 工具系统
 │   │   └── mod.rs
 │   ├── adapters/       # 适配器
-│   │   ├── axum_adapter.rs
 │   │   ├── tauri_adapter.rs
 │   │   └── mod.rs
 │   ├── error.rs        # 错误处理
@@ -375,3 +374,4 @@ rig-agent/
 - [rig-core](https://github.com/0xPlaygrounds/rig) - 底层 AI 框架
 - [tokio](https://tokio.rs/) - 异步运行时
 - [tracing](https://tracing.rs/) - 日志记录框架
+

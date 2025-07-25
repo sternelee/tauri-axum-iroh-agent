@@ -1,6 +1,6 @@
 //! Rig Agent - 基于 rig-core 的通用 Agent 模块
-//! 
-//! 提供跨平台的 AI Agent 功能，支持 tauri、axum 等不同运行环境
+//!
+//! 提供跨平台的 AI Agent 功能，支持 tauri, iroh 等不同运行环境
 
 pub mod core;
 pub mod error;
@@ -9,7 +9,7 @@ pub mod adapters;
 
 // 重新导出核心类型和功能
 pub use core::{
-    AgentConfig, AgentManager, AgentMessage, AgentResponse, AgentRole, 
+    AgentConfig, AgentManager, AgentMessage, AgentResponse, AgentRole,
     ConversationHistory, MessageType, ToolCall, ToolResult
 };
 
@@ -21,8 +21,8 @@ pub use tools::{BuiltinTools, CustomTool, ToolDefinition, ToolManager};
 
 // 重新导出适配器
 pub use adapters::{
-    AgentAdapter, StandaloneAgentAdapter, 
-    TauriAgentAdapter, AxumAgentAdapter
+    AgentAdapter, StandaloneAgentAdapter,
+    TauriAgentAdapter
 };
 
 /// 便捷的初始化函数

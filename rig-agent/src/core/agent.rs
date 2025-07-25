@@ -7,7 +7,7 @@ use crate::core::types::{
 use crate::error::{AgentError, AgentResult};
 use crate::tools::ToolManager;
 use rig::{
-    agent::Agent,
+client::builder::DynClientBuilder, completion::Prompt
     completion::{CompletionModel, Message},
     providers::{anthropic, cohere, gemini, openai},
     tool::Tool,
@@ -115,9 +115,9 @@ impl AgentManager {
 
         let agent_config = config.unwrap_or_else(|| self.default_config.clone());
         let provider = self.create_provider(&agent_config).await?;
+        let multi_client = DynClientBuilder::new();
 
-        let mut agent_builder =
-            rig_core::agent::AgentBuilder::new(agent_config.model.clone(), provider)
+        let mut agent_builder = multi_client.agent(provider, agent_config.model.clone())
                 .with_preamble(agent_config.preamble.clone().unwrap_or_default())
                 .with_temperature(agent_config.temperature.unwrap_or(0.7))
                 .with_max_tokens(agent_config.max_tokens.unwrap_or(1024));
