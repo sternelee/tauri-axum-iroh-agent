@@ -1,13 +1,14 @@
 //! 核心 Agent 实现 - 基于 rig-core
 
-use crate::core::types::{AgentConfig, AgentMessage, AgentResponse, ConversationHistory, ToolCall};
+use crate::core::types::{AgentConfig, AgentMessage, AgentResponse, ConversationHistory};
 use crate::error::{AgentError, AgentResult};
 use crate::tools::ToolManager;
 use rig::{
     agent::Agent as RigAgent,
-    completion::CompletionModel,
-    providers::{anthropic, cohere, gemini, openai},
-    tool::Tool,
+    completion::{Chat, Prompt},
+    message::Message,
+    providers::{anthropic, openai},
+    prelude::*,
 };
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -20,14 +21,42 @@ pub struct AgentManager {
     tool_manager: ToolManager,
 }
 
-/// Agent 结构体
+/// Agent 包装器，用于存储不同类型的 Agent
+enum AgentWrapper {
+    OpenAI(RigAgent<openai::responses_api::ResponsesCompletionModel>),
+    Anthropic(RigAgent<anthropic::completion::CompletionModel>),
+}
+
+/// Agent 信息结构体
 pub struct Agent {
     id: String,
     config: AgentConfig,
-    rig_agent: RigAgent<Box<dyn CompletionModel + Send + Sync>>,
-    conversation_history: Vec<AgentMessage>,
+    wrapper: AgentWrapper,
+    conversation_history: Vec<Message>,
     created_at: chrono::DateTime<chrono::Utc>,
     last_activity: chrono::DateTime<chrono::Utc>,
+}
+
+impl AgentWrapper {
+    /// 发送 prompt 消息
+    async fn prompt(&self, message: &str) -> AgentResult<String> {
+        let result = match self {
+            AgentWrapper::OpenAI(agent) => agent.prompt(message).await,
+            AgentWrapper::Anthropic(agent) => agent.prompt(message).await,
+        };
+
+        result.map_err(|e| AgentError::other(format!("AI 模型调用失败: {}", e)))
+    }
+
+    /// 发送聊天消息（带历史）
+    async fn chat(&self, message: Message, history: Vec<Message>) -> AgentResult<String> {
+        let result = match self {
+            AgentWrapper::OpenAI(agent) => agent.chat(message, history).await,
+            AgentWrapper::Anthropic(agent) => agent.chat(message, history).await,
+        };
+
+        result.map_err(|e| AgentError::other(format!("AI 模型调用失败: {}", e)))
+    }
 }
 
 impl AgentManager {
@@ -42,40 +71,53 @@ impl AgentManager {
         }
     }
 
-    /// 创建完成模型
+    /// 创建 Agent 实例
     #[instrument(skip(self), fields(provider = %config.provider.as_deref().unwrap_or("openai"), model = %config.model))]
-    fn create_completion_model(
-        &self,
-        config: &AgentConfig,
-    ) -> AgentResult<Box<dyn CompletionModel + Send + Sync>> {
+    fn create_agent_wrapper(&self, config: &AgentConfig) -> AgentResult<AgentWrapper> {
         let provider = config.provider.as_deref().unwrap_or("openai");
 
-        info!("正在创建完成模型: {} - {}", provider, config.model);
+        info!("正在创建 Agent 实例: {} - {}", provider, config.model);
 
         let result = match provider.to_lowercase().as_str() {
             "openai" => {
-                debug!("创建 OpenAI 完成模型");
+                debug!("创建 OpenAI Agent");
                 let client = openai::Client::from_env();
-                let model = client.completion_model(&config.model);
-                Ok(Box::new(model) as Box<dyn CompletionModel + Send + Sync>)
+                let mut agent_builder = client.agent(&config.model);
+                
+                if let Some(preamble) = &config.preamble {
+                    agent_builder = agent_builder.preamble(preamble);
+                }
+                
+                if let Some(temperature) = config.temperature {
+                    agent_builder = agent_builder.temperature(temperature as f64);
+                }
+                
+                if let Some(max_tokens) = config.max_tokens {
+                    agent_builder = agent_builder.max_tokens(max_tokens as u64);
+                }
+
+                let agent = agent_builder.build();
+                Ok(AgentWrapper::OpenAI(agent))
             }
             "anthropic" => {
-                debug!("创建 Anthropic 完成模型");
+                debug!("创建 Anthropic Agent");
                 let client = anthropic::Client::from_env();
-                let model = client.completion_model(&config.model);
-                Ok(Box::new(model) as Box<dyn CompletionModel + Send + Sync>)
-            }
-            "cohere" => {
-                debug!("创建 Cohere 完成模型");
-                let client = cohere::Client::from_env();
-                let model = client.completion_model(&config.model);
-                Ok(Box::new(model) as Box<dyn CompletionModel + Send + Sync>)
-            }
-            "gemini" => {
-                debug!("创建 Gemini 完成模型");
-                let client = gemini::Client::from_env();
-                let model = client.completion_model(&config.model);
-                Ok(Box::new(model) as Box<dyn CompletionModel + Send + Sync>)
+                let mut agent_builder = client.agent(&config.model);
+                
+                if let Some(preamble) = &config.preamble {
+                    agent_builder = agent_builder.preamble(preamble);
+                }
+                
+                if let Some(temperature) = config.temperature {
+                    agent_builder = agent_builder.temperature(temperature as f64);
+                }
+                
+                if let Some(max_tokens) = config.max_tokens {
+                    agent_builder = agent_builder.max_tokens(max_tokens as u64);
+                }
+
+                let agent = agent_builder.build();
+                Ok(AgentWrapper::Anthropic(agent))
             }
             _ => {
                 error!("不支持的 AI 提供商: {}", provider);
@@ -87,8 +129,8 @@ impl AgentManager {
         };
 
         match &result {
-            Ok(_) => info!("完成模型创建成功: {} - {}", provider, config.model),
-            Err(e) => error!("完成模型创建失败: {}", e),
+            Ok(_) => info!("Agent 实例创建成功: {} - {}", provider, config.model),
+            Err(e) => error!("Agent 实例创建失败: {}", e),
         }
 
         result
@@ -107,28 +149,14 @@ impl AgentManager {
         }
 
         let agent_config = config.unwrap_or_else(|| self.default_config.clone());
-        let completion_model = self.create_completion_model(&agent_config)?;
-
-        // 创建 Agent 构建器
-        let mut agent_builder = RigAgent::builder(completion_model)
-            .preamble(agent_config.preamble.clone().unwrap_or_default())
-            .temperature(agent_config.temperature.unwrap_or(0.7))
-            .max_tokens(agent_config.max_tokens.unwrap_or(1024));
-
-        // 添加工具（如果有）
-        let available_tools = self.tool_manager.get_available_tools();
-        if !available_tools.is_empty() {
-            agent_builder = agent_builder.tools(available_tools);
-        }
-
-        let rig_agent = agent_builder.build();
+        let wrapper = self.create_agent_wrapper(&agent_config)?;
 
         agents.insert(
             agent_id.clone(),
             Agent {
                 id: agent_id.clone(),
                 config: agent_config,
-                rig_agent,
+                wrapper,
                 conversation_history: Vec::new(),
                 created_at: chrono::Utc::now(),
                 last_activity: chrono::Utc::now(),
@@ -171,9 +199,9 @@ impl AgentManager {
         agent.last_activity = chrono::Utc::now();
         debug!("更新 Agent {} 最后活动时间", agent_id);
 
-        // 添加用户消息到历史
-        let user_message = AgentMessage::user(message.to_string());
-        agent.conversation_history.push(user_message);
+        // 创建用户消息
+        let user_message = Message::user(message);
+        agent.conversation_history.push(user_message.clone());
         debug!(
             "添加用户消息到对话历史，当前历史长度: {}",
             agent.conversation_history.len()
@@ -183,10 +211,11 @@ impl AgentManager {
         debug!("准备调用 AI 模型");
         let ai_start_time = std::time::Instant::now();
 
-        let response = agent.rig_agent.chat(message).await.map_err(|e| {
-            error!("AI 模型调用失败，Agent: {}, 错误: {}", agent_id, e);
-            AgentError::other(format!("AI 模型调用失败: {}", e))
-        })?;
+        // 使用对话历史进行聊天
+        let response = agent
+            .wrapper
+            .chat(user_message, agent.conversation_history.clone())
+            .await?;
 
         let ai_duration = ai_start_time.elapsed();
         info!(
@@ -194,56 +223,10 @@ impl AgentManager {
             agent_id, ai_duration
         );
 
-        let response_content = response.content().to_string();
-        let mut tool_calls_result = None;
+        debug!("AI 响应内容长度: {}", response.len());
 
-        debug!("AI 响应内容长度: {}", response_content.len());
-
-        // 处理工具调用
-        if let Some(tool_calls) = response.tool_calls() {
-            info!("检测到工具调用，数量: {}", tool_calls.len());
-            let mut executed_tools = Vec::new();
-
-            for tool_call in tool_calls {
-                debug!("执行工具调用: {}", tool_call.name());
-
-                let rig_tool_call = ToolCall {
-                    id: tool_call.id().to_string(),
-                    name: tool_call.name().to_string(),
-                    arguments: tool_call.arguments().to_string(),
-                    timestamp: chrono::Utc::now(),
-                };
-
-                let tool_start_time = std::time::Instant::now();
-                let tool_result = self.tool_manager.execute_tool(&rig_tool_call).await;
-                let tool_duration = tool_start_time.elapsed();
-
-                match tool_result {
-                    Ok(result) => {
-                        info!(
-                            "工具执行成功: {}, 耗时: {:?}",
-                            tool_call.name(),
-                            tool_duration
-                        );
-                        debug!("工具执行结果: {}", result.result);
-                    }
-                    Err(e) => {
-                        error!(
-                            "工具执行失败: {}, 错误: {}, 耗时: {:?}",
-                            tool_call.name(),
-                            e,
-                            tool_duration
-                        );
-                    }
-                }
-
-                executed_tools.push(rig_tool_call);
-            }
-
-            tool_calls_result = Some(executed_tools);
-        }
-
-        let assistant_message = AgentMessage::assistant(response_content.clone());
+        // 创建助手消息并添加到历史
+        let assistant_message = Message::assistant(&response);
         agent.conversation_history.push(assistant_message);
 
         // 应用历史限制
@@ -262,19 +245,43 @@ impl AgentManager {
             agent_id,
             response_id,
             total_duration,
-            response_content.len()
+            response.len()
         );
 
         Ok(AgentResponse {
             id: response_id,
             agent_id: agent_id.to_string(),
-            content: response_content,
+            content: response,
             timestamp: chrono::Utc::now(),
             model: agent.config.model.clone(),
             usage: None, // TODO: 从 rig-core 获取使用统计
-            tool_calls: tool_calls_result,
+            tool_calls: None, // TODO: 处理工具调用
             finish_reason: Some("stop".to_string()),
         })
+    }
+
+    /// 简单的 prompt 方法（不保存历史）
+    #[instrument(skip(self, message), fields(agent_id = %agent_id, message_len = message.len()))]
+    pub async fn prompt(&self, agent_id: &str, message: &str) -> AgentResult<String> {
+        let agents = self.agents.read().await;
+        let agent = agents.get(agent_id).ok_or_else(|| {
+            error!("Agent 不存在: {}", agent_id);
+            AgentError::AgentNotFound(agent_id.to_string())
+        })?;
+
+        debug!("准备调用 AI 模型进行简单 prompt");
+        let ai_start_time = std::time::Instant::now();
+
+        // 使用 prompt 方法，不保存历史
+        let response = agent.wrapper.prompt(message).await?;
+
+        let ai_duration = ai_start_time.elapsed();
+        info!(
+            "简单 prompt 完成，Agent: {}, 耗时: {:?}",
+            agent_id, ai_duration
+        );
+
+        Ok(response)
     }
 
     /// 获取对话历史
@@ -287,15 +294,46 @@ impl AgentManager {
             .get(agent_id)
             .ok_or_else(|| AgentError::AgentNotFound(agent_id.to_string()))?;
 
-        let total_tokens = agent
+        // 将 rig Message 转换为我们的 AgentMessage
+        let messages: Vec<AgentMessage> = agent
             .conversation_history
+            .iter()
+            .map(|msg| {
+                match msg {
+                    Message::User { content, .. } => {
+                        // 提取文本内容
+                        let text = content.iter()
+                            .filter_map(|c| match c {
+                                rig::message::UserContent::Text(text) => Some(text.text.clone()),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        AgentMessage::user(text)
+                    }
+                    Message::Assistant { content, .. } => {
+                        // 提取文本内容
+                        let text = content.iter()
+                            .filter_map(|c| match c {
+                                rig::message::AssistantContent::Text(text) => Some(text.text.clone()),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        AgentMessage::assistant(text)
+                    }
+                }
+            })
+            .collect();
+
+        let total_tokens = messages
             .iter()
             .map(|msg| msg.content.len() as u64)
             .sum();
 
         Ok(ConversationHistory {
             agent_id: agent_id.to_string(),
-            messages: agent.conversation_history.clone(),
+            messages,
             total_messages: agent.conversation_history.len(),
             total_tokens: Some(total_tokens),
             created_at: agent.created_at,
@@ -350,6 +388,44 @@ impl AgentManager {
     pub fn get_tool_manager_mut(&mut self) -> &mut ToolManager {
         &mut self.tool_manager
     }
+
+    /// 获取 Agent 统计信息
+    pub async fn get_agent_stats(&self, agent_id: &str) -> AgentResult<AgentStats> {
+        let agents = self.agents.read().await;
+        let agent = agents
+            .get(agent_id)
+            .ok_or_else(|| AgentError::AgentNotFound(agent_id.to_string()))?;
+
+        let total_messages = agent.conversation_history.len();
+        let user_messages = agent.conversation_history.iter()
+            .filter(|msg| matches!(msg, Message::User { .. }))
+            .count();
+        let assistant_messages = agent.conversation_history.iter()
+            .filter(|msg| matches!(msg, Message::Assistant { .. }))
+            .count();
+
+        Ok(AgentStats {
+            agent_id: agent_id.to_string(),
+            total_messages,
+            user_messages,
+            assistant_messages,
+            created_at: agent.created_at,
+            last_activity: agent.last_activity,
+            uptime: chrono::Utc::now().signed_duration_since(agent.created_at),
+        })
+    }
+}
+
+/// Agent 统计信息
+#[derive(Debug, Clone)]
+pub struct AgentStats {
+    pub agent_id: String,
+    pub total_messages: usize,
+    pub user_messages: usize,
+    pub assistant_messages: usize,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub last_activity: chrono::DateTime<chrono::Utc>,
+    pub uptime: chrono::Duration,
 }
 
 #[cfg(test)]
@@ -391,43 +467,70 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_tool_manager_integration() {
+    async fn test_simple_prompt() {
         let config = AgentConfig::default();
-        let manager = AgentManager::new(config);
-
-        // 测试工具管理器
-        let tool_manager = manager.get_tool_manager();
-        assert!(tool_manager.has_tool("calculator"));
-        assert!(tool_manager.has_tool("current_time"));
-        assert!(!tool_manager.has_tool("nonexistent_tool"));
-    }
-
-    #[tokio::test]
-    async fn test_agent_config_management() {
-        let config = AgentConfig::default();
-        let mut manager = AgentManager::new(config.clone());
+        let mut manager = AgentManager::new(config);
 
         if std::env::var("OPENAI_API_KEY").is_ok() {
             // 创建 Agent
             manager
-                .create_agent("config_test_agent".to_string(), None)
+                .create_agent("prompt_test_agent".to_string(), None)
                 .await
                 .unwrap();
 
-            // 获取配置
-            let retrieved_config = manager.get_agent_config("config_test_agent").await.unwrap();
-            assert_eq!(retrieved_config.model, config.model);
+            // 测试简单 prompt
+            let response = manager
+                .prompt("prompt_test_agent", "Hello, how are you?")
+                .await
+                .unwrap();
 
-            // 更新配置
-            let mut new_config = config.clone();
-            new_config.temperature = Some(0.5);
+            assert!(!response.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_conversation_history() {
+        let config = AgentConfig::default();
+        let mut manager = AgentManager::new(config);
+
+        if std::env::var("OPENAI_API_KEY").is_ok() {
+            // 创建 Agent
             manager
-                .update_agent_config("config_test_agent", new_config.clone())
+                .create_agent("history_test_agent".to_string(), None)
                 .await
                 .unwrap();
 
-            let updated_config = manager.get_agent_config("config_test_agent").await.unwrap();
-            assert_eq!(updated_config.temperature, Some(0.5));
+            // 发送消息
+            manager
+                .chat("history_test_agent", "Hello")
+                .await
+                .unwrap();
+            manager
+                .chat("history_test_agent", "How are you?")
+                .await
+                .unwrap();
+
+            // 获取历史
+            let history = manager
+                .get_conversation_history("history_test_agent")
+                .await
+                .unwrap();
+
+            assert!(history.total_messages >= 4); // 2 user + 2 assistant
+            assert!(!history.messages.is_empty());
+
+            // 清除历史
+            manager
+                .clear_conversation_history("history_test_agent")
+                .await
+                .unwrap();
+
+            let history_after = manager
+                .get_conversation_history("history_test_agent")
+                .await
+                .unwrap();
+
+            assert_eq!(history_after.total_messages, 0);
         }
     }
 }

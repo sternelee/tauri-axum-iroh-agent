@@ -1,10 +1,10 @@
 //! Agent 工具模块
 
-use crate::error::{AgentError, AgentResult};
 use crate::core::types::{ToolCall, ToolResult};
+use crate::error::{AgentError, AgentResult};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::Utc;
 
 /// 工具定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,62 +28,71 @@ impl BuiltinTools {
     /// 创建内置工具集合
     pub fn new() -> Self {
         let mut tools = HashMap::new();
-        
+
         // 添加计算器工具
-        tools.insert("calculator".to_string(), ToolDefinition {
-            name: "calculator".to_string(),
-            description: "执行基本的数学计算".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "expression": {
-                        "type": "string",
-                        "description": "要计算的数学表达式，例如：2+3*4"
-                    }
-                },
-                "required": ["expression"]
-            }),
-            required: false,
-        });
+        tools.insert(
+            "calculator".to_string(),
+            ToolDefinition {
+                name: "calculator".to_string(),
+                description: "执行基本的数学计算".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "expression": {
+                            "type": "string",
+                            "description": "要计算的数学表达式，例如：2+3*4"
+                        }
+                    },
+                    "required": ["expression"]
+                }),
+                required: false,
+            },
+        );
 
         // 添加时间工具
-        tools.insert("current_time".to_string(), ToolDefinition {
-            name: "current_time".to_string(),
-            description: "获取当前时间".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "timezone": {
-                        "type": "string",
-                        "description": "时区，例如：Asia/Shanghai",
-                        "default": "UTC"
+        tools.insert(
+            "current_time".to_string(),
+            ToolDefinition {
+                name: "current_time".to_string(),
+                description: "获取当前时间".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "timezone": {
+                            "type": "string",
+                            "description": "时区，例如：Asia/Shanghai",
+                            "default": "UTC"
+                        }
                     }
-                }
-            }),
-            required: false,
-        });
+                }),
+                required: false,
+            },
+        );
 
         // 添加天气工具（示例）
-        tools.insert("weather".to_string(), ToolDefinition {
-            name: "weather".to_string(),
-            description: "获取指定城市的天气信息".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "city": {
-                        "type": "string",
-                        "description": "城市名称，例如：北京"
+        tools.insert(
+            "weather".to_string(),
+            ToolDefinition {
+                name: "weather".to_string(),
+                description: "获取指定城市的天气信息".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "city": {
+                            "type": "string",
+                            "description": "城市名称，例如：北京"
+                        },
+                        "unit": {
+                            "type": "string",
+                            "description": "温度单位：celsius 或 fahrenheit",
+                            "default": "celsius"
+                        }
                     },
-                    "unit": {
-                        "type": "string",
-                        "description": "温度单位：celsius 或 fahrenheit",
-                        "default": "celsius"
-                    }
-                },
-                "required": ["city"]
-            }),
-            required: false,
-        });
+                    "required": ["city"]
+                }),
+                required: false,
+            },
+        );
 
         Self { tools }
     }
@@ -101,7 +110,7 @@ impl BuiltinTools {
     /// 执行工具
     pub async fn execute_tool(&self, tool_call: &ToolCall) -> AgentResult<ToolResult> {
         let start_time = std::time::Instant::now();
-        
+
         let result = match tool_call.name.as_str() {
             "calculator" => self.execute_calculator(tool_call).await,
             "current_time" => self.execute_current_time(tool_call).await,
@@ -147,16 +156,14 @@ impl BuiltinTools {
 
     /// 执行当前时间工具
     async fn execute_current_time(&self, tool_call: &ToolCall) -> AgentResult<String> {
-        let args: serde_json::Value = serde_json::from_str(&tool_call.arguments)
-            .unwrap_or_else(|_| serde_json::json!({}));
-        
-        let timezone = args["timezone"]
-            .as_str()
-            .unwrap_or("UTC");
+        let args: serde_json::Value =
+            serde_json::from_str(&tool_call.arguments).unwrap_or_else(|_| serde_json::json!({}));
+
+        let timezone = args["timezone"].as_str().unwrap_or("UTC");
 
         let now = Utc::now();
         let formatted_time = now.format("%Y-%m-%d %H:%M:%S UTC").to_string();
-        
+
         Ok(format!("当前时间（{}）: {}", timezone, formatted_time))
     }
 
@@ -169,15 +176,18 @@ impl BuiltinTools {
         let unit = args["unit"].as_str().unwrap_or("celsius");
 
         // 这里是示例实现，实际应用中需要调用真实的天气API
-        Ok(format!("{}的天气：晴朗，温度 25°{}", city, 
-            if unit == "fahrenheit" { "F" } else { "C" }))
+        Ok(format!(
+            "{}的天气：晴朗，温度 25°{}",
+            city,
+            if unit == "fahrenheit" { "F" } else { "C" }
+        ))
     }
 
     /// 简单的数学表达式计算
     fn evaluate_expression(&self, expression: &str) -> AgentResult<f64> {
         // 这是一个非常简单的实现，实际应用中应该使用专门的表达式解析器
         let cleaned = expression.replace(" ", "");
-        
+
         // 支持基本的四则运算
         if let Some(pos) = cleaned.find('+') {
             let (left, right) = cleaned.split_at(pos);
@@ -186,7 +196,7 @@ impl BuiltinTools {
             let right_val = self.evaluate_expression(right)?;
             return Ok(left_val + right_val);
         }
-        
+
         if let Some(pos) = cleaned.rfind('-') {
             if pos > 0 {
                 let (left, right) = cleaned.split_at(pos);
@@ -196,7 +206,7 @@ impl BuiltinTools {
                 return Ok(left_val - right_val);
             }
         }
-        
+
         if let Some(pos) = cleaned.rfind('*') {
             let (left, right) = cleaned.split_at(pos);
             let right = &right[1..];
@@ -204,7 +214,7 @@ impl BuiltinTools {
             let right_val = self.evaluate_expression(right)?;
             return Ok(left_val * right_val);
         }
-        
+
         if let Some(pos) = cleaned.rfind('/') {
             let (left, right) = cleaned.split_at(pos);
             let right = &right[1..];
@@ -215,9 +225,10 @@ impl BuiltinTools {
             }
             return Ok(left_val / right_val);
         }
-        
+
         // 解析数字
-        cleaned.parse::<f64>()
+        cleaned
+            .parse::<f64>()
             .map_err(|_| AgentError::tool(format!("无法解析表达式: {}", expression)))
     }
 }
@@ -233,13 +244,13 @@ impl Default for BuiltinTools {
 pub trait CustomTool: Send + Sync {
     /// 工具名称
     fn name(&self) -> &str;
-    
+
     /// 工具描述
     fn description(&self) -> &str;
-    
+
     /// 参数定义
     fn parameters(&self) -> serde_json::Value;
-    
+
     /// 执行工具
     async fn execute(&self, arguments: &str) -> AgentResult<String>;
 }
@@ -273,7 +284,7 @@ impl ToolManager {
     /// 获取所有工具定义
     pub fn get_all_tool_definitions(&self) -> Vec<ToolDefinition> {
         let mut tools = self.builtin_tools.get_all_tools();
-        
+
         for custom_tool in self.custom_tools.values() {
             tools.push(ToolDefinition {
                 name: custom_tool.name().to_string(),
@@ -282,36 +293,25 @@ impl ToolManager {
                 required: false,
             });
         }
-        
+
         tools
     }
 
-    /// 获取可用工具（用于 rig）
-    pub fn get_available_tools(&self) -> Vec<rig::tool::Tool> {
+    /// 获取可用工具名称列表
+    /// TODO: 实现与 rig 工具系统的集成
+    pub fn get_available_tools(&self) -> Vec<String> {
         let mut tools = Vec::new();
-        
-        // 添加内置工具
+
+        // 添加内置工具名称
         for tool_def in self.builtin_tools.get_all_tools() {
-            if let Ok(tool) = rig::tool::Tool::new(
-                tool_def.name,
-                tool_def.description,
-                tool_def.parameters,
-            ) {
-                tools.push(tool);
-            }
+            tools.push(tool_def.name.clone());
         }
-        
-        // 添加自定义工具
+
+        // 添加自定义工具名称
         for custom_tool in self.custom_tools.values() {
-            if let Ok(tool) = rig::tool::Tool::new(
-                custom_tool.name().to_string(),
-                custom_tool.description().to_string(),
-                custom_tool.parameters(),
-            ) {
-                tools.push(tool);
-            }
+            tools.push(custom_tool.name().to_string());
         }
-        
+
         tools
     }
 
@@ -325,7 +325,7 @@ impl ToolManager {
         // 再尝试自定义工具
         if let Some(custom_tool) = self.custom_tools.get(&tool_call.name) {
             let start_time = std::time::Instant::now();
-            
+
             let result = custom_tool.execute(&tool_call.arguments).await;
             let duration_ms = start_time.elapsed().as_millis() as u64;
 
@@ -419,3 +419,4 @@ mod tests {
         assert_eq!(tools.evaluate_expression("8/2").unwrap(), 4.0);
     }
 }
+

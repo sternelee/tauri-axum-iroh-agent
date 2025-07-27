@@ -22,8 +22,10 @@ pub use tools::{BuiltinTools, CustomTool, ToolDefinition, ToolManager};
 // 重新导出适配器
 pub use adapters::{
     AgentAdapter, StandaloneAgentAdapter,
-    TauriAgentAdapter
 };
+
+#[cfg(feature = "tauri-support")]
+pub use adapters::TauriAgentAdapter;
 
 /// 便捷的初始化函数
 pub async fn init_agent_manager(config: AgentConfig) -> AgentResult<AgentManager> {
@@ -48,7 +50,7 @@ impl ConfigBuilder {
     }
 
     pub fn system_prompt<S: Into<String>>(mut self, prompt: S) -> Self {
-        self.config.system_prompt = Some(prompt.into());
+        self.config.preamble = Some(prompt.into());
         self
     }
 

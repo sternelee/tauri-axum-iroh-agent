@@ -1,8 +1,10 @@
 //! 适配器模块，支持不同运行环境
 
+#[cfg(feature = "tauri-support")]
 pub mod tauri_adapter;
 pub mod standalone;
 
+#[cfg(feature = "tauri-support")]
 pub use tauri_adapter::TauriAgentAdapter;
 pub use standalone::StandaloneAgentAdapter;
 

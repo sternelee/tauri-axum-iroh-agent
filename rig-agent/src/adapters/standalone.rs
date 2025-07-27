@@ -1,8 +1,9 @@
 //! 独立适配器实现
 
 use crate::{
+    adapters::AgentAdapter,
     core::{AgentConfig, AgentResponse, ConversationHistory},
-    error::{AgentError, AgentResult},
+    error::{AgentResult},
     AgentManager,
 };
 use std::sync::Arc;
@@ -185,7 +186,7 @@ pub mod simple_api {
 
     /// 对话式聊天
     pub async fn conversation_chat(agent_id: &str, messages: Vec<&str>, config: Option<AgentConfig>) -> AgentResult<Vec<AgentResponse>> {
-        let adapter = StandaloneAgentAdapter::new(config.unwrap_or_default());
+        let adapter = StandaloneAgentAdapter::new(config.clone().unwrap_or_default());
         adapter.create_agent(agent_id.to_string(), config).await?;
         
         let mut responses = Vec::new();
@@ -219,7 +220,7 @@ impl StandaloneConfigBuilder {
 
     /// 设置系统提示
     pub fn system_prompt(mut self, prompt: String) -> Self {
-        self.config.system_prompt = Some(prompt);
+        self.config.preamble = Some(prompt);
         self
     }
 

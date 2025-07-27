@@ -10,8 +10,8 @@ pub struct AgentConfig {
     pub model: String,
     /// Provider 名称 (openai, anthropic, cohere, gemini)
     pub provider: Option<String>,
-    /// 系统提示
-    pub system_prompt: Option<String>,
+    /// 系统提示/前言
+    pub preamble: Option<String>,
     /// 温度参数 (0.0-2.0)
     pub temperature: Option<f32>,
     /// 最大令牌数
@@ -29,7 +29,7 @@ impl Default for AgentConfig {
         Self {
             model: "gpt-3.5-turbo".to_string(),
             provider: Some("openai".to_string()),
-            system_prompt: Some("你是一个有用的AI助手。".to_string()),
+            preamble: Some("你是一个有用的AI助手。".to_string()),
             temperature: Some(0.7),
             max_tokens: Some(1000),
             enable_tools: false,
