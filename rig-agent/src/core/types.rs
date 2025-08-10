@@ -1,7 +1,53 @@
 //! Agent 核心类型定义
 
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+/// 客户端配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientConfig {
+    /// 提供商名称
+    pub provider: String,
+    /// 默认模型
+    pub default_model: String,
+    /// API 密钥（可选，从环境变量获取）
+    pub api_key: Option<String>,
+    /// 基础 URL（可选，用于自定义端点）
+    pub base_url: Option<String>,
+    /// 其他配置参数
+    pub extra_params: std::collections::HashMap<String, serde_json::Value>,
+}
+
+impl ClientConfig {
+    /// 创建新的客户端配置
+    pub fn new<S: Into<String>>(provider: S, default_model: S) -> Self {
+        Self {
+            provider: provider.into(),
+            default_model: default_model.into(),
+            api_key: None,
+            base_url: None,
+            extra_params: std::collections::HashMap::new(),
+        }
+    }
+
+    /// 设置 API 密钥
+    pub fn with_api_key<S: Into<String>>(mut self, api_key: S) -> Self {
+        self.api_key = Some(api_key.into());
+        self
+    }
+
+    /// 设置基础 URL
+    pub fn with_base_url<S: Into<String>>(mut self, base_url: S) -> Self {
+        self.base_url = Some(base_url.into());
+        self
+    }
+
+    /// 添加额外参数
+    pub fn with_param<S: Into<String>, V: Into<serde_json::Value>>(mut self, key: S, value: V) -> Self {
+        self.extra_params.insert(key.into(), value.into());
+        self
+    }
+}
 
 /// Agent 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,7 +55,7 @@ pub struct AgentConfig {
     /// AI 模型名称
     pub model: String,
     /// Provider 名称 (openai, anthropic, cohere, gemini)
-    pub provider: Option<String>,
+    pub provider: String,
     /// 系统提示/前言
     pub preamble: Option<String>,
     /// 温度参数 (0.0-2.0)
@@ -24,11 +70,12 @@ pub struct AgentConfig {
     pub extra_params: std::collections::HashMap<String, serde_json::Value>,
 }
 
-impl Default for AgentConfig {
-    fn default() -> Self {
+impl AgentConfig {
+    /// 创建新的 Agent 配置
+    pub fn new<S: Into<String>>(provider: S, model: S) -> Self {
         Self {
-            model: "gpt-3.5-turbo".to_string(),
-            provider: Some("openai".to_string()),
+            model: model.into(),
+            provider: provider.into(),
             preamble: Some("你是一个有用的AI助手。".to_string()),
             temperature: Some(0.7),
             max_tokens: Some(1000),
@@ -36,6 +83,48 @@ impl Default for AgentConfig {
             history_limit: Some(50),
             extra_params: std::collections::HashMap::new(),
         }
+    }
+
+    /// 设置系统提示
+    pub fn with_preamble<S: Into<String>>(mut self, preamble: S) -> Self {
+        self.preamble = Some(preamble.into());
+        self
+    }
+
+    /// 设置温度
+    pub fn with_temperature(mut self, temperature: f32) -> Self {
+        self.temperature = Some(temperature);
+        self
+    }
+
+    /// 设置最大令牌数
+    pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
+        self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    /// 启用工具
+    pub fn with_tools(mut self, enable: bool) -> Self {
+        self.enable_tools = enable;
+        self
+    }
+
+    /// 设置历史限制
+    pub fn with_history_limit(mut self, limit: usize) -> Self {
+        self.history_limit = Some(limit);
+        self
+    }
+
+    /// 添加额外参数
+    pub fn with_param<S: Into<String>, V: Into<serde_json::Value>>(mut self, key: S, value: V) -> Self {
+        self.extra_params.insert(key.into(), value.into());
+        self
+    }
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self::new("openai", "gpt-3.5-turbo")
     }
 }
 
@@ -361,9 +450,12 @@ mod tests {
 
     #[test]
     fn test_message_summary() {
-        let msg = AgentMessage::user("这是一个很长的消息内容，用来测试摘要功能是否正常工作，应该会被截断显示".to_string());
+        let msg = AgentMessage::user(
+            "这是一个很长的消息内容，用来测试摘要功能是否正常工作，应该会被截断显示".to_string(),
+        );
         let summary = msg.summary();
         assert!(summary.contains("[用户]"));
         assert!(summary.contains("..."));
     }
 }
+

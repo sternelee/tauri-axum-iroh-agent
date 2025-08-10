@@ -183,8 +183,9 @@ mod tests {
     fn test_error_response() {
         let error = AgentError::model("模型调用失败");
         let response = ErrorResponse::from_error(&error);
-        
+
         assert_eq!(response.code, "MODEL_ERROR");
         assert!(response.message.contains("模型错误"));
     }
 }
+

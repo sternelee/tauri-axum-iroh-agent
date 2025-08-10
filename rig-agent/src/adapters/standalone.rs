@@ -2,8 +2,8 @@
 
 use crate::{
     adapters::AgentAdapter,
-    core::{AgentConfig, AgentResponse, ConversationHistory},
-    error::{AgentResult},
+    core::{AgentConfig, AgentResponse, ClientRegistry, ConversationHistory},
+    error::AgentResult,
     AgentManager,
 };
 use std::sync::Arc;
@@ -13,14 +13,17 @@ use tokio::sync::RwLock;
 pub struct StandaloneAgentAdapter {
     /// Agent 管理器
     manager: Arc<RwLock<AgentManager>>,
+    /// 客户端注册表
+    registry: ClientRegistry,
 }
 
 impl StandaloneAgentAdapter {
     /// 创建新的独立适配器
     pub fn new(default_config: AgentConfig) -> Self {
         let manager = Arc::new(RwLock::new(AgentManager::new(default_config)));
-        
-        Self { manager }
+        let registry = ClientRegistry::new();
+
+        Self { manager, registry }
     }
 
     /// 获取 Agent 管理器
@@ -34,7 +37,10 @@ impl StandaloneAgentAdapter {
     }
 
     /// 获取对话历史
-    pub async fn get_conversation_history(&self, agent_id: &str) -> AgentResult<ConversationHistory> {
+    pub async fn get_conversation_history(
+        &self,
+        agent_id: &str,
+    ) -> AgentResult<ConversationHistory> {
         let manager = self.manager.read().await;
         manager.get_conversation_history(agent_id).await
     }
@@ -52,45 +58,40 @@ impl StandaloneAgentAdapter {
     }
 
     /// 更新 Agent 配置
-    pub async fn update_agent_config(&self, agent_id: &str, config: AgentConfig) -> AgentResult<()> {
-        let mut manager = self.manager.write().await;
+    pub async fn update_agent_config(
+        &self,
+        agent_id: &str,
+        config: AgentConfig,
+    ) -> AgentResult<()> {
+        let manager = self.manager.read().await;
         manager.update_agent_config(agent_id, config).await
     }
 
     /// 批量聊天
-    pub async fn batch_chat(&self, requests: Vec<(String, String)>) -> Vec<(String, AgentResult<AgentResponse>)> {
+    pub async fn batch_chat(
+        &self,
+        requests: Vec<(String, String)>,
+    ) -> Vec<(String, AgentResult<AgentResponse>)> {
         let manager = self.manager.read().await;
         let mut results = Vec::new();
-        
+
         for (agent_id, message) in requests {
-            let result = manager.chat(&agent_id, &message).await;
+            let result = manager.chat(&self.registry, &agent_id, &message).await;
             results.push((agent_id, result));
         }
-        
+
         results
     }
 
     /// 并发聊天
-    pub async fn concurrent_chat(&self, requests: Vec<(String, String)>) -> Vec<(String, AgentResult<AgentResponse>)> {
-        let manager = self.manager.clone();
-        let tasks: Vec<_> = requests.into_iter().map(|(agent_id, message)| {
-            let manager = manager.clone();
-            let agent_id_clone = agent_id.clone();
-            tokio::spawn(async move {
-                let manager = manager.read().await;
-                let result = manager.chat(&agent_id_clone, &message).await;
-                (agent_id, result)
-            })
-        }).collect();
-
-        let mut results = Vec::new();
-        for task in tasks {
-            if let Ok(result) = task.await {
-                results.push(result);
-            }
-        }
-        
-        results
+    pub async fn concurrent_chat(
+        &self,
+        requests: Vec<(String, String)>,
+    ) -> Vec<(String, AgentResult<AgentResponse>)> {
+        // ClientRegistry is not Send, so we cannot move it across threads.
+        // We will perform chats sequentially for now.
+        // A more advanced implementation might use a pool of registries or a different concurrency model.
+        self.batch_chat(requests).await
     }
 
     /// 获取统计信息
@@ -119,16 +120,16 @@ impl StandaloneAgentAdapter {
 impl super::AgentAdapter for StandaloneAgentAdapter {
     async fn chat(&self, agent_id: &str, message: &str) -> AgentResult<AgentResponse> {
         let manager = self.manager.read().await;
-        manager.chat(agent_id, message).await
+        manager.chat(&self.registry, agent_id, message).await
     }
 
     async fn create_agent(&self, agent_id: String, config: Option<AgentConfig>) -> AgentResult<()> {
-        let mut manager = self.manager.write().await;
+        let manager = self.manager.read().await;
         manager.create_agent(agent_id, config).await
     }
 
     async fn remove_agent(&self, agent_id: &str) -> AgentResult<bool> {
-        let mut manager = self.manager.write().await;
+        let manager = self.manager.read().await;
         Ok(manager.remove_agent(agent_id).await)
     }
 
@@ -159,42 +160,58 @@ pub mod simple_api {
     /// 创建默认 Agent 并发送消息
     pub async fn quick_chat(message: &str) -> AgentResult<AgentResponse> {
         let adapter = StandaloneAgentAdapter::new(AgentConfig::default());
-        adapter.create_agent("default".to_string(), None).await?;
+        adapter
+            .create_agent("default".to_string(), None)
+            .await?;
         adapter.chat("default", message).await
     }
 
     /// 创建自定义 Agent 并发送消息
-    pub async fn custom_chat(agent_id: &str, message: &str, config: AgentConfig) -> AgentResult<AgentResponse> {
+    pub async fn custom_chat(
+        agent_id: &str,
+        message: &str,
+        config: AgentConfig,
+    ) -> AgentResult<AgentResponse> {
         let adapter = StandaloneAgentAdapter::new(config.clone());
-        adapter.create_agent(agent_id.to_string(), Some(config)).await?;
+        adapter
+            .create_agent(agent_id.to_string(), Some(config))
+            .await?;
         adapter.chat(agent_id, message).await
     }
 
     /// 批量处理消息
     pub async fn batch_process(messages: Vec<&str>) -> AgentResult<Vec<AgentResponse>> {
         let adapter = StandaloneAgentAdapter::new(AgentConfig::default());
-        adapter.create_agent("batch".to_string(), None).await?;
-        
+        adapter
+            .create_agent("batch".to_string(), None)
+            .await?;
+
         let mut responses = Vec::new();
         for message in messages {
             let response = adapter.chat("batch", message).await?;
             responses.push(response);
         }
-        
+
         Ok(responses)
     }
 
     /// 对话式聊天
-    pub async fn conversation_chat(agent_id: &str, messages: Vec<&str>, config: Option<AgentConfig>) -> AgentResult<Vec<AgentResponse>> {
+    pub async fn conversation_chat(
+        agent_id: &str,
+        messages: Vec<&str>,
+        config: Option<AgentConfig>,
+    ) -> AgentResult<Vec<AgentResponse>> {
         let adapter = StandaloneAgentAdapter::new(config.clone().unwrap_or_default());
-        adapter.create_agent(agent_id.to_string(), config).await?;
-        
+        adapter
+            .create_agent(agent_id.to_string(), config)
+            .await?;
+
         let mut responses = Vec::new();
         for message in messages {
             let response = adapter.chat(agent_id, message).await?;
             responses.push(response);
         }
-        
+
         Ok(responses)
     }
 }

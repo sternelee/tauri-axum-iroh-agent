@@ -2,15 +2,15 @@
 //!
 //! 提供跨平台的 AI Agent 功能，支持 tauri, iroh 等不同运行环境
 
+pub mod adapters;
 pub mod core;
 pub mod error;
 pub mod tools;
-pub mod adapters;
 
 // 重新导出核心类型和功能
 pub use core::{
-    AgentConfig, AgentManager, AgentMessage, AgentResponse, AgentRole,
-    ConversationHistory, MessageType, ToolCall, ToolResult
+    AgentConfig, AgentManager, AgentMessage, AgentResponse, AgentRole, ClientConfig, 
+    ConversationHistory, MessageType, ToolCall, ToolResult,
 };
 
 // 重新导出错误类型
@@ -20,9 +20,7 @@ pub use error::{AgentError, AgentResult, ErrorResponse};
 pub use tools::{BuiltinTools, CustomTool, ToolDefinition, ToolManager};
 
 // 重新导出适配器
-pub use adapters::{
-    AgentAdapter, StandaloneAgentAdapter,
-};
+pub use adapters::{AgentAdapter, StandaloneAgentAdapter};
 
 #[cfg(feature = "tauri-support")]
 pub use adapters::TauriAgentAdapter;

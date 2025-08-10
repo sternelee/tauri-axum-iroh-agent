@@ -19,12 +19,12 @@ tauri-compat = ["tauri"]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 data-encoding = "2.9"
-dumbpipe = "0.28"
+dumbpipe = "0.29"
 futures-lite = "2.6"
-iroh = "0.90"
-iroh-blobs = "0.91"
-iroh-docs = "0.35.0"
-iroh-gossip = "0.90"
+iroh = "0.91"
+iroh-blobs = "0.93"
+iroh-docs = "0.91"
+iroh-gossip = "0.91"
 iroh-node-util = "0.35"
 rand = "0.9.1"
 serde = { version = "1.0.219", features = ["derive"] }

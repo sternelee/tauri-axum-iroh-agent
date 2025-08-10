@@ -14,11 +14,11 @@ struct Cli {
     /// 用户名
     #[arg(short, long, default_value = "匿名用户")]
     name: String,
-    
+
     /// 详细日志输出
     #[arg(short, long)]
     verbose: bool,
-    
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -123,7 +123,7 @@ async fn open_chat_room(name: String, node_id: String) -> Result<()> {
     // 生成邀请码 - 使用简化的格式
     let topic_id = format!("topic_{}", rand::random::<u32>());
     let ticket_data = format!("{}:{}", topic_id, node_id);
-    
+
     println!("\n=== 聊天室已创建 ===");
     println!("邀请码: {}", ticket_data);
     println!("请将此邀请码分享给其他人加入聊天室");
@@ -144,7 +144,7 @@ async fn join_chat_room(name: String, node_id: String, ticket: String) -> Result
     if parts.len() != 2 {
         return Err(anyhow::anyhow!("无效的邀请码格式"));
     }
-    
+
     let topic_id = parts[0];
     let creator_node_id = parts[1];
 
@@ -193,11 +193,12 @@ async fn start_chat_simulation(name: String, node_id: String) -> Result<()> {
         }
 
         if !input.trim().is_empty() {
-            let message = Message::chat_message(name.clone(), input.trim().to_string(), node_id.clone());
-            
+            let message =
+                Message::chat_message(name.clone(), input.trim().to_string(), node_id.clone());
+
             // 显示自己发送的消息
             println!("[{}] {}", name, input.trim());
-            
+
             // 这里应该广播消息到网络
             // 由于 API 问题，暂时只是本地显示
             info!("消息已发送: {}", input.trim());
@@ -228,3 +229,4 @@ fn input_loop(tx: mpsc::Sender<String>) {
         }
     }
 }
+

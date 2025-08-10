@@ -419,4 +419,3 @@ mod tests {
         assert_eq!(tools.evaluate_expression("8/2").unwrap(), 4.0);
     }
 }
-

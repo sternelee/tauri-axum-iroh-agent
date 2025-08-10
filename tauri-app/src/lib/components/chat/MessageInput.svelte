@@ -13,7 +13,7 @@
 	function autoResize() {
 		if (textareaElement) {
 			textareaElement.style.height = 'auto';
-			textareaElement.style.height = Math.min(textareaElement.scrollHeight, 120) + 'px';
+			textareaElement.style.height = Math.min(textareaElement.scrollHeight, 150) + 'px';
 		}
 	}
 
@@ -118,7 +118,12 @@
 		<div class="input-hints">
 			<div class="hint-left">
 				{#if isLoading}
-					<span class="hint-loading">AI正在思考中...</span>
+					<span class="hint-loading">
+						<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+						</svg>
+						AI正在思考中...
+					</span>
 				{:else}
 					<span class="hint-normal">支持 Markdown 格式</span>
 				{/if}
@@ -132,9 +137,9 @@
 
 <style>
 	.message-input-container {
-		background: white;
-		border-top: 1px solid #e5e7eb;
-		padding: 16px 24px 24px;
+		background: linear-gradient(to top, #ffffff 0%, #f8fafc 100%);
+		border-top: 1px solid #e2e8f0;
+		padding: 20px 24px 24px;
 		flex-shrink: 0;
 	}
 
@@ -147,17 +152,18 @@
 		display: flex;
 		align-items: flex-end;
 		gap: 12px;
-		background: #f9fafb;
-		border: 1px solid #e5e7eb;
-		border-radius: 12px;
+		background: white;
+		border: 1px solid #e2e8f0;
+		border-radius: 16px;
 		padding: 12px;
-		transition: all 0.2s ease;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		position: relative;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 	}
 
 	.input-area:focus-within {
-		border-color: #10b981;
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+		border-color: #0ea5e9;
+		box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2);
 		background: white;
 	}
 
@@ -167,17 +173,18 @@
 		outline: none;
 		background: transparent;
 		resize: none;
-		font-size: 14px;
-		line-height: 1.5;
-		color: #111827;
+		font-size: 15px;
+		line-height: 1.6;
+		color: #0f172a;
 		font-family: inherit;
-		min-height: 20px;
-		max-height: 120px;
+		min-height: 24px;
+		max-height: 150px;
 		overflow-y: auto;
+		padding: 4px 0;
 	}
 
 	.message-textarea::placeholder {
-		color: #9ca3af;
+		color: #94a3b8;
 	}
 
 	.message-textarea:disabled {
@@ -187,23 +194,24 @@
 
 	/* 发送按钮样式 */
 	:global(.send-button) {
-		background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+		background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
 		border: none !important;
 		color: white !important;
-		width: 36px !important;
-		height: 36px !important;
-		border-radius: 8px !important;
+		width: 40px !important;
+		height: 40px !important;
+		border-radius: 12px !important;
 		padding: 0 !important;
 		display: flex !important;
 		align-items: center !important;
 		justify-content: center !important;
-		transition: all 0.2s ease !important;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
 		flex-shrink: 0 !important;
+		box-shadow: 0 2px 6px rgba(14, 165, 233, 0.3) !important;
 	}
 
 	:global(.send-button:hover:not(:disabled)) {
-		transform: translateY(-1px) !important;
-		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4) !important;
+		transform: translateY(-2px) !important;
+		box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4) !important;
 	}
 
 	:global(.send-button:active:not(:disabled)) {
@@ -226,22 +234,33 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-top: 8px;
-		font-size: 12px;
-		color: #6b7280;
+		margin-top: 12px;
+		font-size: 13px;
+		color: #64748b;
 	}
 
 	.hint-loading {
 		color: #f59e0b;
 		font-weight: 500;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.hint-loading svg {
+		animation: spin 1.5s linear infinite;
 	}
 
 	.hint-normal {
-		color: #6b7280;
+		color: #64748b;
 	}
 
 	.hint-shortcut {
-		color: #9ca3af;
+		color: #94a3b8;
+		background: #f1f5f9;
+		padding: 2px 8px;
+		border-radius: 20px;
+		font-size: 12px;
 	}
 
 	/* 动画 */
@@ -257,27 +276,33 @@
 	/* 响应式设计 */
 	@media (max-width: 768px) {
 		.message-input-container {
-			padding: 12px 16px 16px;
+			padding: 16px 16px 20px;
 		}
 
 		.input-area {
 			padding: 10px;
+			border-radius: 14px;
 		}
 
 		.input-hints {
 			flex-direction: column;
 			align-items: flex-start;
-			gap: 4px;
+			gap: 6px;
+			margin-top: 10px;
 		}
 
 		.hint-right {
 			align-self: flex-end;
 		}
+		
+		.message-textarea {
+			font-size: 16px; /* 移动端增大字体 */
+		}
 	}
 
 	/* 滚动条样式 */
 	.message-textarea::-webkit-scrollbar {
-		width: 4px;
+		width: 6px;
 	}
 
 	.message-textarea::-webkit-scrollbar-track {
@@ -285,11 +310,11 @@
 	}
 
 	.message-textarea::-webkit-scrollbar-thumb {
-		background: #d1d5db;
-		border-radius: 2px;
+		background: #cbd5e1;
+		border-radius: 3px;
 	}
 
 	.message-textarea::-webkit-scrollbar-thumb:hover {
-		background: #9ca3af;
+		background: #94a3b8;
 	}
 </style>

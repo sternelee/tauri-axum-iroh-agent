@@ -55,8 +55,8 @@
 <style>
 	.message-container {
 		display: flex;
-		margin-bottom: 16px;
-		animation: fadeIn 0.3s ease-out;
+		margin-bottom: 20px;
+		animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 
 	.message-container.user {
@@ -70,8 +70,8 @@
 	.message-wrapper {
 		display: flex;
 		align-items: flex-end;
-		max-width: 70%;
-		gap: 8px;
+		max-width: 85%;
+		gap: 12px;
 	}
 
 	.user .message-wrapper {
@@ -79,13 +79,14 @@
 	}
 
 	.avatar {
-		width: 32px;
-		height: 32px;
+		width: 36px;
+		height: 36px;
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 	}
 
 	.user-avatar {
@@ -94,64 +95,69 @@
 	}
 
 	.ai-avatar {
-		background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+		background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
 		color: white;
 	}
 
 	.message-bubble {
 		border-radius: 18px;
-		padding: 12px 16px;
+		padding: 14px 18px;
 		position: relative;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+		max-width: 100%;
 	}
 
 	.user .message-bubble {
 		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 		color: white;
+		border-top-right-radius: 4px;
 	}
 
 	.ai .message-bubble {
 		background: white;
-		color: #374151;
-		border: 1px solid #e5e7eb;
+		color: #334155;
+		border: 1px solid #e2e8f0;
+		border-top-left-radius: 4px;
 	}
 
 	.message-content {
-		margin-bottom: 4px;
+		margin-bottom: 6px;
+		line-height: 1.6;
 	}
 
 	.message-content p {
 		margin: 0;
-		line-height: 1.5;
 		word-wrap: break-word;
+		white-space: pre-wrap;
 	}
 
 	.message-time {
-		font-size: 11px;
-		opacity: 0.7;
+		font-size: 12px;
+		opacity: 0.8;
 		text-align: right;
 	}
 
 	.user .message-time {
-		color: rgba(255, 255, 255, 0.8);
+		color: rgba(255, 255, 255, 0.9);
 	}
 
 	.ai .message-time {
-		color: #6b7280;
+		color: #94a3b8;
 	}
 
 	/* 打字指示器动画 */
 	.typing-indicator {
 		display: flex;
-		gap: 4px;
+		gap: 6px;
 		align-items: center;
+		padding: 4px 0;
 	}
 
 	.typing-indicator span {
-		width: 6px;
-		height: 6px;
+		width: 8px;
+		height: 8px;
 		border-radius: 50%;
-		background-color: #9ca3af;
+		background-color: #94a3b8;
 		animation: typing 1.4s infinite ease-in-out;
 	}
 
@@ -166,7 +172,7 @@
 	@keyframes typing {
 		0%, 80%, 100% {
 			transform: scale(0.8);
-			opacity: 0.5;
+			opacity: 0.6;
 		}
 		40% {
 			transform: scale(1);
@@ -177,7 +183,7 @@
 	@keyframes fadeIn {
 		from {
 			opacity: 0;
-			transform: translateY(10px);
+			transform: translateY(12px);
 		}
 		to {
 			opacity: 1;
@@ -188,16 +194,24 @@
 	/* 响应式设计 */
 	@media (max-width: 640px) {
 		.message-wrapper {
-			max-width: 85%;
+			max-width: 90%;
 		}
 		
 		.message-bubble {
-			padding: 10px 14px;
+			padding: 12px 16px;
 		}
 		
 		.avatar {
-			width: 28px;
-			height: 28px;
+			width: 32px;
+			height: 32px;
+		}
+		
+		.message-content {
+			margin-bottom: 4px;
+		}
+		
+		.message-container {
+			margin-bottom: 16px;
 		}
 	}
 </style>
