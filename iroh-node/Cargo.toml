@@ -1,45 +1,64 @@
 [package]
 name = "iroh-node"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+description = "简化的iroh-gossip通信中心，用于在tauri和axum中集成，并与rig-agent服务交互"
+authors = ["Your Name <your.email@example.com>"]
+license = "MIT"
 
-[[bin]]
-name = "iroh-node"
-path = "src/main.rs"
+[dependencies]
+# iroh核心依赖
+iroh-net = { version = "0.12.0", features = ["full"] }
+iroh-gossip = "0.12.0"
+ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 
-[lib]
-name = "iroh_node"
-path = "src/lib.rs"
+# rig-agent依赖
+rig-agent = { path = "../rig-agent" }
+
+# 序列化/反序列化
+serde = { version = "1.0.188", features = ["derive"] }
+serde_json = "1.0.107"
+postcard = { version = "1.0.8", features = ["use-std"] }
+data-encoding = "2.4.0"
+
+# 异步运行时
+tokio = { version = "1.32.0", features = ["full"] }
+futures-lite = "1.13.0"
+
+# 日志和错误处理
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
+thiserror = "1.0.49"
+
+# 工具库
+bytes = "1.5.0"
+rand = "0.8.5"
+chrono = { version = "0.4.31", features = ["serde"] }
+clap = { version = "4.4.6", features = ["derive"] }
+
+# Tauri集成
+tauri = { version = "2.7", optional = true }
+
+# Axum集成
+axum = { version = "0.6.20", optional = true, features = ["headers"] }
+tower-http = { version = "0.4.4", features = ["cors"], optional = true }
 
 [features]
 default = []
-tauri-compat = ["tauri"]
+tauri-plugin = ["tauri"]
+tauri-compat = ["tauri"]  # 添加与tauri-app兼容的特性名称
+axum-adapter = ["axum", "tower-http"]
+full = ["tauri-plugin", "tauri-compat", "axum-adapter"]
 
-[dependencies]
-anyhow = "1.0"
-clap = { version = "4.5", features = ["derive"] }
-data-encoding = "2.9"
-dumbpipe = "0.29"
-futures-lite = "2.6"
-iroh = "0.91"
-iroh-blobs = "0.93"
-iroh-docs = "0.91"
-iroh-gossip = "0.91"
-iroh-node-util = "0.35"
-rand = "0.9.1"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-tokio = "1.45.1"
-tokio-stream = "0.1"
-thiserror = "2.0"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-dirs-next = "2.0"
-uuid = { version = "1.0", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
-hex = "0.4"
-sha2 = "0.10"
-bytes = "1.0"
+[[example]]
+name = "tauri_example"
+required-features = ["tauri-plugin"]
 
-# 可选依赖
-tauri = { version = "2.7", optional = true }
+[[example]]
+name = "axum_example"
+required-features = ["axum-adapter"]
+
+[dev-dependencies]
+tauri = { version = "2.7.0" }
+axum = { version = "0.6.20" }
+tower-http = { version = "0.4.4", features = ["cors"] }

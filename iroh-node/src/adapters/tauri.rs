@@ -1,6 +1,6 @@
-//! Tauri v2 适配器
+//! Tauri适配器
 //!
-//! 提供Tauri v2插件，用于在Tauri应用中集成P2P节点
+//! 提供Tauri插件，用于在Tauri应用中集成P2P节点
 
 use std::sync::Arc;
 
@@ -16,14 +16,13 @@ use tracing::{error, info};
 use crate::{MessageType, NodeConfig, NodeResult, P2PNode};
 
 /// P2P节点状态
-#[derive(Default)]
-pub struct P2PNodeState {
+struct P2PNodeState {
     /// P2P节点
     node: Arc<RwLock<Option<P2PNode>>>,
 }
 
 /// Tauri插件
-pub struct TauriPlugin<R: Runtime> {
+pub struct TauriAdapter<R: Runtime> {
     /// 插件
     plugin: TauriPlugin<R>,
 }
@@ -74,15 +73,10 @@ pub struct AgentRequest {
     pub prompt: String,
 }
 
-impl<R: Runtime> TauriPlugin<R> {
-    /// 创建新的Tauri插件
+impl<R: Runtime> TauriAdapter<R> {
+    /// 创建新的Tauri适配器
     pub fn new() -> Self {
         let plugin = Builder::new("iroh-node")
-            .setup(|app| {
-                // 初始化P2P节点状态
-                app.state::<P2PNodeState>();
-                Ok(())
-            })
             .invoke_handler(tauri::generate_handler![
                 init_node,
                 get_node_status,
@@ -93,6 +87,13 @@ impl<R: Runtime> TauriPlugin<R> {
                 leave_topic,
                 stop_node
             ])
+            .setup(|app| {
+                // 初始化P2P节点状态
+                app.manage(P2PNodeState {
+                    node: Arc::new(RwLock::new(None)),
+                });
+                Ok(())
+            })
             .build();
 
         Self { plugin }
