@@ -5,10 +5,11 @@ use crate::error::{AgentError, AgentResult};
 use crate::tools::ToolManager;
 use rig::{
     agent::Agent as RigAgent,
+    client::builder::DynClientBuilder,
     completion::{Chat, Prompt},
     message::Message,
-    providers::{anthropic, openai},
     prelude::*,
+    providers::{anthropic, openai},
 };
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -83,15 +84,15 @@ impl AgentManager {
                 debug!("创建 OpenAI Agent");
                 let client = openai::Client::from_env();
                 let mut agent_builder = client.agent(&config.model);
-                
+
                 if let Some(preamble) = &config.preamble {
                     agent_builder = agent_builder.preamble(preamble);
                 }
-                
+
                 if let Some(temperature) = config.temperature {
                     agent_builder = agent_builder.temperature(temperature as f64);
                 }
-                
+
                 if let Some(max_tokens) = config.max_tokens {
                     agent_builder = agent_builder.max_tokens(max_tokens as u64);
                 }
@@ -103,15 +104,15 @@ impl AgentManager {
                 debug!("创建 Anthropic Agent");
                 let client = anthropic::Client::from_env();
                 let mut agent_builder = client.agent(&config.model);
-                
+
                 if let Some(preamble) = &config.preamble {
                     agent_builder = agent_builder.preamble(preamble);
                 }
-                
+
                 if let Some(temperature) = config.temperature {
                     agent_builder = agent_builder.temperature(temperature as f64);
                 }
-                
+
                 if let Some(max_tokens) = config.max_tokens {
                     agent_builder = agent_builder.max_tokens(max_tokens as u64);
                 }
@@ -254,7 +255,7 @@ impl AgentManager {
             content: response,
             timestamp: chrono::Utc::now(),
             model: agent.config.model.clone(),
-            usage: None, // TODO: 从 rig-core 获取使用统计
+            usage: None,      // TODO: 从 rig-core 获取使用统计
             tool_calls: None, // TODO: 处理工具调用
             finish_reason: Some("stop".to_string()),
         })
@@ -302,7 +303,8 @@ impl AgentManager {
                 match msg {
                     Message::User { content, .. } => {
                         // 提取文本内容
-                        let text = content.iter()
+                        let text = content
+                            .iter()
                             .filter_map(|c| match c {
                                 rig::message::UserContent::Text(text) => Some(text.text.clone()),
                                 _ => None,
@@ -313,9 +315,12 @@ impl AgentManager {
                     }
                     Message::Assistant { content, .. } => {
                         // 提取文本内容
-                        let text = content.iter()
+                        let text = content
+                            .iter()
                             .filter_map(|c| match c {
-                                rig::message::AssistantContent::Text(text) => Some(text.text.clone()),
+                                rig::message::AssistantContent::Text(text) => {
+                                    Some(text.text.clone())
+                                }
                                 _ => None,
                             })
                             .collect::<Vec<_>>()
@@ -326,10 +331,7 @@ impl AgentManager {
             })
             .collect();
 
-        let total_tokens = messages
-            .iter()
-            .map(|msg| msg.content.len() as u64)
-            .sum();
+        let total_tokens = messages.iter().map(|msg| msg.content.len() as u64).sum();
 
         Ok(ConversationHistory {
             agent_id: agent_id.to_string(),
@@ -397,10 +399,14 @@ impl AgentManager {
             .ok_or_else(|| AgentError::AgentNotFound(agent_id.to_string()))?;
 
         let total_messages = agent.conversation_history.len();
-        let user_messages = agent.conversation_history.iter()
+        let user_messages = agent
+            .conversation_history
+            .iter()
             .filter(|msg| matches!(msg, Message::User { .. }))
             .count();
-        let assistant_messages = agent.conversation_history.iter()
+        let assistant_messages = agent
+            .conversation_history
+            .iter()
             .filter(|msg| matches!(msg, Message::Assistant { .. }))
             .count();
 
@@ -501,10 +507,7 @@ mod tests {
                 .unwrap();
 
             // 发送消息
-            manager
-                .chat("history_test_agent", "Hello")
-                .await
-                .unwrap();
+            manager.chat("history_test_agent", "Hello").await.unwrap();
             manager
                 .chat("history_test_agent", "How are you?")
                 .await

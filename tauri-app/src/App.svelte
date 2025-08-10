@@ -35,7 +35,7 @@
 		.chat-app {
 			padding: 20px;
 		}
-		
+
 		.chat-container {
 			border-radius: 12px;
 			max-height: calc(100vh - 40px);
